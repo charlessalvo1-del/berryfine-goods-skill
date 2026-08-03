@@ -18,6 +18,9 @@
 
 Use a local folder instead of uploading hundreds of images into chat.
 
+Require Python 3.11 or newer. Run command examples from the repository root using the complete nested Skill path.
+Replace every `<...>` placeholder with the real value and quote concrete paths containing spaces before execution.
+
 The user may provide one flat, unnumbered camera roll. Do not require item folders, renamed photos, separator cards, or manual boundary confirmation. A folder-per-item layout remains supported when it already exists, but it is not required for BFG processing.
 
 Flat sequence example:
@@ -99,7 +102,15 @@ When the user explicitly states that prior research is complete and requests onl
 
 Run `legacy_catalog_refresh.py prepare`, upsert its target-intake batch with the item revision log, and run `legacy_catalog_refresh.py verify`. Preserve identification, values, research, photos, and stable item IDs. Permit only deterministic policy migration: legacy `DONATE` from $40 through $49.99 becomes `CONFIRM DONATION`; existing `SELL`, below-$40 `DONATE`, and independently uncertain `REVIEW` remain. Keep every refreshed row `DRAFT` and human-review `PENDING`; the verification must prohibit listing authorization.
 
-Generate both workbooks from the untouched original template and validate them with `catalog_gate.py` plus `delivery_gate.py --workflow legacy-catalog-refresh`, passing the source manifest, main-folder categorized set, and categorized verification. The final gate performs one destination-only digest check; it does not rerun source-photo review or research. Never describe this workflow as new photo review, new research, or listing approval.
+Generate both workbooks from the untouched original template. From the repository root, run:
+
+```powershell
+python .\berryfine-goods-skill\scripts\catalog_gate.py --template <template.xlsx> --catalog "<client-folder>\<Client Folder Name> New Catalog.xlsx" --exceptions "<client-folder>\<Client Folder Name> Exceptions.xlsx" --ledger <client-inventory.csv> --intake-id <new-intake-id> --catalog-payload <catalog-payload.json> --builder-verification <catalog-builder-verification.json> --output <catalog-verification.json>
+python .\berryfine-goods-skill\scripts\bfg.py legacy-audit --manifest <source-manifest.json> --preflight <preflight-lock.json> --ledger <client-inventory.csv> --intake-id <new-intake-id> --catalog "<client-folder>\<Client Folder Name> New Catalog.xlsx" --exceptions "<client-folder>\<Client Folder Name> Exceptions.xlsx"
+python .\berryfine-goods-skill\scripts\delivery_gate.py --workflow legacy-catalog-refresh --client-folder <client-folder> --manifest <source-manifest.json> --ledger <client-inventory.csv> --categorized "<client-folder>\Categorized Inventory <YYYY-MM-DD>" --categorized-verification <categorized-verification.json> --intake-id <new-intake-id> --preflight-lock <preflight-lock.json> --catalog-verification <catalog-verification.json>
+```
+
+`legacy-audit` validates retained source evidence and policy-only refresh conditions; the delivery gate performs final legacy-refresh delivery verification. Both applicable checks must return `PASS`. Do not process a legacy refresh through the normal full-intake `bfg.py audit` artifact requirements. The final gate performs one destination-only digest check; it does not recreate current-intake photo-quality, blind forward/reverse review, new grouping research, or completed-sale research artifacts. The normal full-intake audit does not replace the legacy delivery gate. No command in this workflow authorizes a listing. Never describe this workflow as new photo review, new research, or listing approval.
 
 Supply each prior-test or archive directory as an exact repeatable `--ignore-dir` rule. Record the exclusions in the new manifest so the audit trail proves that old images were not processed.
 
@@ -148,7 +159,7 @@ Run the following without prior-test grouping, identification, or valuation data
 Example:
 
 ```powershell
-python scripts/sequence_review_gate.py --manifest <intake-manifest.json> --forward <forward-review.json> --reverse <reverse-review.json> --cohesion <cohesion-review.json> --adjudication <adjudication.json> --output <final-grouping.json>
+python .\berryfine-goods-skill\scripts\sequence_review_gate.py --manifest <intake-manifest.json> --forward <forward-review.json> --reverse <reverse-review.json> --cohesion <cohesion-review.json> --adjudication <adjudication.json> --output <final-grouping.json>
 ```
 
 Use this format for each forward, reverse, or cohesion review:
@@ -218,7 +229,7 @@ Add working-state, cord, hardware, interior, provenance, or accessory photos whe
 Run:
 
 ```powershell
-python scripts/photo_manifest.py scan --photos <photos> --output "C:\BFG Bulk Import Records\<Client Folder Name>\<intake-id>\intake-manifest.json" --client-id <client-id> --client-name "<client-name>" --intake-id <intake-id> --catalog-template <template.xlsx> --preflight-lock <preflight-lock.json> --intake-method auto [--ignore-dir <archive-folder>] [--ignore-file <file-or-glob>]
+python .\berryfine-goods-skill\scripts\photo_manifest.py scan --photos <photos> --output "C:\BFG Bulk Import Records\<Client Folder Name>\<intake-id>\intake-manifest.json" --client-id <client-id> --client-name "<client-name>" --intake-id <intake-id> --catalog-template <template.xlsx> --preflight-lock <preflight-lock.json> --intake-method auto [--ignore-dir <archive-folder>] [--ignore-file <file-or-glob>]
 ```
 
 The scanner:
@@ -273,7 +284,7 @@ Do not mark a photo `excluded` without a reason.
 After every included photo has an `assigned` status and unique spreadsheet-matched `group_id`, run:
 
 ```powershell
-python scripts/organize_photos.py --manifest <manifest.json> --output "<client-folder>\Categorized Inventory <YYYY-MM-DD>"
+python .\berryfine-goods-skill\scripts\organize_photos.py --manifest <manifest.json> --output "<client-folder>\Categorized Inventory <YYYY-MM-DD>"
 ```
 
 Use the intake or processing date in ISO format. Set each final `group_id` and nested item-folder name to the Windows-safe `<SKU> - <DESCRIPTION>` identity from catalog columns B and C. Never use column D as the folder name; retained locations may vary and new rows use `Storage`. Reject blank, duplicate, reserved, absolute, or path-traversing group IDs and relative paths. Reject any active SHA-256 hash assigned to more than one categorized destination. The script copies files, verifies every source and destination SHA-256 against the manifest, and preserves the flat originals. Use `--resume` only to verify and complete an existing categorized directory; a same-name file with different contents is a hard failure.
@@ -330,8 +341,11 @@ Treat `<Client Folder Name> New Catalog.xlsx` and `<Client Folder Name> Exceptio
 After spreadsheet rendering and content checks, run:
 
 ```powershell
-python scripts/catalog_gate.py --template <template.xlsx> --catalog "<client-folder>\<Client Folder Name> New Catalog.xlsx" --exceptions "<client-folder>\<Client Folder Name> Exceptions.xlsx" --ledger <client-inventory.csv> --intake-id <intake-id> --catalog-payload <catalog-payload.json> --builder-verification <catalog-builder-verification.json> --output <catalog-verification.json>
-python scripts/delivery_gate.py --client-folder <client-folder> --manifest <intake-manifest.json> --ledger <client-inventory.csv> --categorized "<client-folder>\Categorized Inventory <YYYY-MM-DD>" --preflight-lock <preflight-lock.json> --catalog-verification <catalog-verification.json>
+python .\berryfine-goods-skill\scripts\catalog_gate.py --template <template.xlsx> --catalog "<client-folder>\<Client Folder Name> New Catalog.xlsx" --exceptions "<client-folder>\<Client Folder Name> Exceptions.xlsx" --ledger <client-inventory.csv> --intake-id <intake-id> --catalog-payload <catalog-payload.json> --builder-verification <catalog-builder-verification.json> --output <catalog-verification.json>
+python .\berryfine-goods-skill\scripts\delivery_gate.py --workflow full-intake --client-folder <client-folder> --manifest <intake-manifest.json> --ledger <client-inventory.csv> --categorized "<client-folder>\Categorized Inventory <YYYY-MM-DD>" --preflight-lock <preflight-lock.json> --catalog-verification <catalog-verification.json>
+python .\berryfine-goods-skill\scripts\bfg.py audit --client-folder <client-folder> --records <iteration-record-folder> --categorized "<client-folder>\Categorized Inventory <YYYY-MM-DD>" --client-name "<Client Folder Name>" --intake-id <intake-id>
 ```
 
-Do not report the run complete unless both gates return `PASS`. The catalog verification must reconcile retained values and formulas through I, plus retained J when it already existed; require the hash-bound Excel materialized-format snapshot for retained appearance; reconcile only current-intake item IDs and actions; and check new-row location, wrapped history, column I, direct fills, formula errors, column J width, filter coverage, print area, and Exceptions coverage. Without Excel builder evidence, it compares normalized retained styles directly. The delivery gate must recheck the verification hashes, confirmed preflight bindings, exact categorized file set, and every categorized photo hash. Missing, misnamed, invalid, unchanged-template, partial, stale, or content-mismatched artifacts are blockers. Audit JSON, the ledger, and categorized photos do not substitute for either required workbook.
+Do not report the run complete unless all three commands return `PASS`. `catalog_gate.py` validates the catalog and Exceptions workbook contract, `delivery_gate.py` performs final full-intake delivery verification, and `bfg.py audit` performs the final aggregate artifact and workflow-status audit without replacing the delivery gate. File presence alone is not completion. The catalog verification must reconcile retained values and formulas through I, plus retained J when it already existed; require the hash-bound Excel materialized-format snapshot for retained appearance; reconcile only current-intake item IDs and actions; and check new-row location, wrapped history, column I, direct fills, formula errors, column J width, filter coverage, print area, and Exceptions coverage. Without Excel builder evidence, it compares normalized retained styles directly. The delivery gate must recheck the verification hashes, confirmed preflight bindings, exact categorized file set, and every categorized photo hash. Missing, misnamed, invalid, unchanged-template, partial, stale, or content-mismatched artifacts are blockers. Audit JSON, the ledger, and categorized photos do not substitute for either required workbook.
+
+The reference exact-format builder is `berryfine-goods-skill/scripts/catalog_builder.ps1`. It requires Windows, PowerShell, desktop Microsoft Excel, and registered Excel COM automation. Another builder may be used only if it produces the same untouched-template, retained-value/formula/displayed-format, conditional-format-scope, column D/H/I/J, direct-fill, filter, print-area, formula-error, Exceptions, catalog-verification, and delivery-verification contract. A non-Excel implementation cannot claim exact compatibility merely because it creates an `.xlsx` file. Human visual inspection remains recommended and does not replace deterministic gates.

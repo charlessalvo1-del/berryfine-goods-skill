@@ -18,8 +18,8 @@ class ReleaseContractTests(unittest.TestCase):
         new_scripts = {path.name for path in (SKILL / "scripts").iterdir()}
         self.assertFalse({"warehouse.py", "movement.py", "container_tracking.py"} & new_scripts)
 
-    def test_version_is_two_point_two_zero(self) -> None:
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.2.0")
+    def test_version_is_two_point_two_one(self) -> None:
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.2.1")
 
     def test_ci_actions_are_immutable_sha_pins(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
@@ -28,6 +28,18 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertTrue(all(len(commit) == 40 for commit in uses))
         self.assertIn("# v6.0.2", workflow)
         self.assertIn("# v6.2.0", workflow)
+        self.assertIn('python-version: ["3.11", "3.14"]', workflow)
+
+    def test_active_python_requirement_is_311(self) -> None:
+        active_files = (
+            ROOT / "README.md",
+            SKILL / "SKILL.md",
+            SKILL / "references" / "bulk-photo-intake.md",
+        )
+        for path in active_files:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("Python 3.11", text)
+            self.assertNotIn("Python 3.10", text)
 
     def test_failure_baseline_is_retained_as_regression_evidence(self) -> None:
         fixture = ROOT / "tests" / "fixtures" / "estate-regression-baseline.json"

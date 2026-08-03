@@ -1,6 +1,6 @@
 # Berryfine Goods Skill
 
-Version 2.2.0 automatically resolves exact duplicate source photos during preflight, retains one deterministic canonical file per content hash, records redundant paths without deleting source evidence, and blocks unresolved duplicate hashes at every downstream photo-delivery gate. Legacy catalog refreshes still preserve completed identification, valuation, and research, apply only deterministic disposition-policy migrations, rebuild the paired workbooks from the original template, and cannot authorize listings.
+Version 2.2.1 standardizes Python 3.11 as the minimum, tests Python 3.11 and 3.14 in CI, documents workflow-specific audit and delivery sequences, makes the Windows/PowerShell/desktop-Excel requirement for the exact workbook builder explicit, and improves non-destructive doctor diagnostics. It preserves version 2.2.0's deterministic exact-duplicate resolution without changing disposition thresholds, human approval requirements, listing authorization, or the prohibition on marketplace publication.
 
 The release also supports bulk, unnumbered photo intake with real image-signature and hash validation, blind-review provenance, deterministic grouping application, structured completed-sale evidence, automatic catalog/Exceptions payloads, reusable Excel automation, immutable audit seals, outcome tracking, and a single workflow audit command. Warehouse tracking is intentionally outside this repository and remains a separate future system.
 
@@ -10,7 +10,27 @@ Before a real intake, run:
 python .\berryfine-goods-skill\scripts\bfg.py doctor
 ```
 
-Before delivery, run `bfg.py audit` with the exact client folder, iteration-record folder, dated categorized folder, client name, and intake ID. A missing New Catalog, missing Exceptions workbook, unhashed photo, unconfirmed preflight, stale gate, split delivery location, unsupported donation decision, or incomplete grouping is a hard blocker.
+For a normal full intake, run these commands from the repository root after authoring the workbooks and categorized photo set:
+
+The examples are command templates: replace every `<...>` placeholder with the real value and quote concrete paths that contain spaces.
+
+```powershell
+python .\berryfine-goods-skill\scripts\catalog_gate.py --template <template.xlsx> --catalog "<client-folder>\<Client Folder Name> New Catalog.xlsx" --exceptions "<client-folder>\<Client Folder Name> Exceptions.xlsx" --ledger <client-inventory.csv> --intake-id <intake-id> --catalog-payload <catalog-payload.json> --builder-verification <catalog-builder-verification.json> --output <catalog-verification.json>
+python .\berryfine-goods-skill\scripts\delivery_gate.py --workflow full-intake --client-folder <client-folder> --manifest <intake-manifest.json> --ledger <client-inventory.csv> --categorized "<client-folder>\Categorized Inventory <YYYY-MM-DD>" --preflight-lock <preflight-lock.json> --catalog-verification <catalog-verification.json>
+python .\berryfine-goods-skill\scripts\bfg.py audit --client-folder <client-folder> --records <iteration-record-folder> --categorized "<client-folder>\Categorized Inventory <YYYY-MM-DD>" --client-name "<Client Folder Name>" --intake-id <intake-id>
+```
+
+`catalog_gate.py` validates the catalog and Exceptions workbook contract. `delivery_gate.py` performs final full-intake delivery verification. `bfg.py audit` performs the final aggregate artifact and workflow-status audit and does not replace `delivery_gate.py`. A full intake is incomplete unless all applicable commands return `PASS`; file presence alone is not completion.
+
+For a legacy catalog refresh, run the repository-root sequence below. `legacy-audit` validates retained source evidence and policy-only refresh conditions; the legacy delivery gate performs final delivery verification. Do not run a legacy refresh through the normal full-intake audit requirements.
+
+```powershell
+python .\berryfine-goods-skill\scripts\catalog_gate.py --template <template.xlsx> --catalog "<client-folder>\<Client Folder Name> New Catalog.xlsx" --exceptions "<client-folder>\<Client Folder Name> Exceptions.xlsx" --ledger <client-inventory.csv> --intake-id <new-intake-id> --catalog-payload <catalog-payload.json> --builder-verification <catalog-builder-verification.json> --output <catalog-verification.json>
+python .\berryfine-goods-skill\scripts\bfg.py legacy-audit --manifest <source-manifest.json> --preflight <preflight-lock.json> --ledger <client-inventory.csv> --intake-id <new-intake-id> --catalog "<client-folder>\<Client Folder Name> New Catalog.xlsx" --exceptions "<client-folder>\<Client Folder Name> Exceptions.xlsx"
+python .\berryfine-goods-skill\scripts\delivery_gate.py --workflow legacy-catalog-refresh --client-folder <client-folder> --manifest <source-manifest.json> --ledger <client-inventory.csv> --categorized "<client-folder>\Categorized Inventory <YYYY-MM-DD>" --categorized-verification <categorized-verification.json> --intake-id <new-intake-id> --preflight-lock <preflight-lock.json> --catalog-verification <catalog-verification.json>
+```
+
+Both applicable legacy checks must return `PASS`. A legacy refresh retains source evidence and does not recreate current-intake photo-quality, blind forward/reverse review, grouping research, or completed-sale research artifacts. No legacy-refresh command authorizes a listing.
 
 Berryfine Goods Skill turns one item or hundreds of client inventory photos into
 an evidence-backed consignment catalog. It supports flat camera rolls and
@@ -90,8 +110,18 @@ iterations.
 8. Run `delivery_gate.py`. Report completion only after it returns `PASS`.
 
 Requirements are Codex, Git, filesystem access to the intake and records roots,
-and Python 3.10 or newer. Microsoft Excel or another compatible spreadsheet app
-is recommended for the human visual review of final `.xlsx` deliverables.
+and Python 3.11 or newer. The reference exact-format builder at
+`berryfine-goods-skill/scripts/catalog_builder.ps1` requires Windows,
+PowerShell, desktop Microsoft Excel, and registered Excel COM automation.
+Another builder may be used only when it produces the same workbook contract
+and passes `catalog_gate.py` and `delivery_gate.py`; creating an `.xlsx` alone
+does not establish exact compatibility. Human visual inspection remains
+recommended and does not replace deterministic gates.
+
+`bfg.py doctor` reports core Python workflow readiness in `status` and
+`core_workflow_ready`. This is a clarified v2.2.1 status contract: exact Excel
+builder readiness is reported separately in `exact_excel_builder_ready`, along
+with Windows, PowerShell, and non-destructive desktop Excel detection results.
 
 ## Install
 
@@ -99,11 +129,14 @@ Clone the public repository on the target PC:
 
 ```powershell
 git clone https://github.com/charlessalvo1-del/berryfine-goods-skill.git
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\skills" | Out-Null
+$skillDestination = Join-Path $env:USERPROFILE ".codex\skills\berryfine-goods-skill"
+New-Item -ItemType Directory -Force $skillDestination | Out-Null
 Copy-Item -Recurse -Force `
-  .\berryfine-goods-skill\berryfine-goods-skill `
-  "$env:USERPROFILE\.codex\skills\berryfine-goods-skill"
+  .\berryfine-goods-skill\berryfine-goods-skill\* `
+  $skillDestination
 ```
+
+To update an existing clone, run `git -C .\berryfine-goods-skill pull --ff-only`, verify `Get-Content .\berryfine-goods-skill\VERSION` reports the intended version, then repeat the destination-directory and `Copy-Item` commands above. These commands copy the Skill contents into the installed Skill directory instead of nesting another Skill folder inside it.
 
 Restart Codex, then invoke the skill with `$berryfine-goods-skill`. The
 human-facing name is **Berryfine Goods Skill**.
