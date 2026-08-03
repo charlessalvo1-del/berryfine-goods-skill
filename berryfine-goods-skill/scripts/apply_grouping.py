@@ -44,6 +44,21 @@ def apply(manifest_path: Path, grouping_path: Path, identities_path: Path) -> tu
         for photo in manifest.get("photos", [])
         if str(photo.get("status", "pending")).casefold() not in {"excluded", "separator", "missing"}
     }
+    active_hashes: dict[str, list[int]] = {}
+    for sequence, photo in inventory_photos.items():
+        digest = str(photo.get("sha256", "")).casefold()
+        if len(digest) == 64:
+            active_hashes.setdefault(digest, []).append(sequence)
+    duplicate_hashes = [
+        sorted(sequences)
+        for sequences in active_hashes.values()
+        if len(sequences) > 1
+    ]
+    if duplicate_hashes:
+        raise GroupingError(
+            "Manifest contains unresolved exact duplicate photo content: "
+            + ", ".join(str(sequences) for sequences in duplicate_hashes)
+        )
     covered: set[int] = set()
     item_ids: set[str] = set()
     group_ids: set[str] = set()

@@ -147,6 +147,21 @@ class OrganizePhotosTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("does not match manifest hash", result.stderr)
 
+    def test_rejects_identical_content_assigned_to_multiple_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.make_manifest(root)
+            photos = root / "photos"
+            (photos / "detail.jpg").write_bytes(b"front")
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["photos"][1]["sha256"] = hashlib.sha256(b"front").hexdigest()
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = self.run_organize(manifest, root / "output")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("identical photo content", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

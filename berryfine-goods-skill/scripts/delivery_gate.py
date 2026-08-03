@@ -162,6 +162,7 @@ def validate_delivery(
     if not assigned:
         errors.append("Manifest has no assigned inventory photos")
     expected_copies: set[Path] = set()
+    expected_hashes: dict[str, Path] = {}
     for photo in assigned:
         group_id = str(photo.get("group_id", "")).strip()
         relative_path = str(photo.get("relative_path", "")).strip()
@@ -180,10 +181,19 @@ def validate_delivery(
         if destination in expected_copies:
             errors.append(f"Duplicate categorized destination: {destination}")
         expected_copies.add(destination)
+        expected_hash = str(photo.get("sha256", "")).casefold()
+        if len(expected_hash) == 64:
+            prior_destination = expected_hashes.get(expected_hash)
+            if prior_destination is not None:
+                errors.append(
+                    "Manifest assigns identical photo content to multiple categorized files: "
+                    f"{prior_destination} and {destination}"
+                )
+            else:
+                expected_hashes[expected_hash] = destination
         if not destination.is_file():
             errors.append(f"Missing categorized photo: {destination}")
         else:
-            expected_hash = str(photo.get("sha256", "")).casefold()
             if len(expected_hash) != 64 or sha256_file(destination) != expected_hash:
                 errors.append(f"Categorized photo content does not match manifest: {destination}")
 

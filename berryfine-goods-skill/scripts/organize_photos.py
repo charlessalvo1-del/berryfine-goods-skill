@@ -53,6 +53,7 @@ def organize(manifest_path: Path, output_folder: Path, resume: bool) -> dict[str
         raise OrganizeError(f"Manifest source folder does not exist: {source_folder}")
 
     assignments: list[tuple[Path, Path, str]] = []
+    assigned_hashes: dict[str, Path] = {}
     groups: set[str] = set()
     excluded = 0
     separators = 0
@@ -86,6 +87,13 @@ def organize(manifest_path: Path, output_folder: Path, resume: bool) -> dict[str
         expected_hash = str(entry.get("sha256", "")).casefold()
         if len(expected_hash) != 64 or sha256_file(source) != expected_hash:
             raise OrganizeError(f"Assigned source photo does not match manifest hash: {source}")
+        prior_destination = assigned_hashes.get(expected_hash)
+        if prior_destination is not None:
+            raise OrganizeError(
+                "Manifest assigns identical photo content to multiple categorized files: "
+                f"{prior_destination} and {destination}"
+            )
+        assigned_hashes[expected_hash] = destination
         assignments.append((source, destination, expected_hash))
         groups.add(group_id)
 

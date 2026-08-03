@@ -123,6 +123,16 @@ class SkillContractTests(unittest.TestCase):
             self.assertIn("photo", text.lower())
             self.assertIn("hash", text.lower())
 
+    def test_exact_duplicates_are_resolved_and_fail_closed(self) -> None:
+        for text in (self.skill_text, self.guide_text):
+            self.assertIn("exact duplicate", text.lower())
+            self.assertIn("canonical", text.lower())
+            self.assertIn("without", text.lower())
+            self.assertIn("delet", text.lower())
+            self.assertIn("SHA-256", text)
+        self.assertIn("hard blocker", self.skill_text)
+        self.assertIn("invalidates the run", self.guide_text)
+
     def test_legacy_refresh_is_explicit_and_cannot_authorize_listing(self) -> None:
         for text in (self.skill_text, self.guide_text):
             self.assertIn("legacy-catalog-refresh", text)

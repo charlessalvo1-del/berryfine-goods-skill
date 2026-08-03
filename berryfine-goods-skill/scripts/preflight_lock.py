@@ -12,9 +12,13 @@ from typing import Any
 
 from bfg_integrity import atomic_write_json, photo_set_digest, sha256_file, sha256_json
 from photo_manifest import (
+    DUPLICATE_RESOLUTION_POLICY,
+    duplicate_group_count,
+    duplicate_resolution_digest,
     make_entry,
     normalize_ignored_dirs,
     normalize_ignored_files,
+    resolve_exact_duplicates,
     scan_folder,
 )
 
@@ -171,6 +175,7 @@ def create_lock(args: argparse.Namespace) -> dict[str, Any]:
         ignored_files: list[str] = []
         ignored_directory_report: list[dict[str, Any]] = []
         ignored_file_report: list[dict[str, Any]] = []
+        duplicate_resolution: list[dict[str, str]] = []
     else:
         if not args.photos:
             raise PreflightError("Full intake requires --photos")
@@ -181,11 +186,16 @@ def create_lock(args: argparse.Namespace) -> dict[str, Any]:
             raise PreflightError("Full intake requires --categorized-output")
         ignored_dirs = normalize_ignored_dirs(args.ignore_dir)
         ignored_files = normalize_ignored_files(args.ignore_file)
-        images, ignored_directory_report, ignored_file_report = scan_folder(
+        scanned_images, ignored_directory_report, ignored_file_report = scan_folder(
             photos, ignored_dirs, ignored_files
         )
+        images, duplicate_resolution, content_hashes = resolve_exact_duplicates(
+            scanned_images, photos
+        )
+        ignored_file_report.extend(duplicate_resolution)
+        ignored_file_report.sort(key=lambda entry: entry["relative_path"].casefold())
         entries = [
-            make_entry(path, photos, index, "sequence")
+            make_entry(path, photos, index, "sequence", content_hashes[path])
             for index, path in enumerate(images, 1)
         ]
         if not entries:
@@ -226,6 +236,15 @@ def create_lock(args: argparse.Namespace) -> dict[str, Any]:
         "ignored_file_rules": ignored_files,
         "ignored_directories": ignored_directory_report,
         "ignored_files": ignored_file_report,
+        "duplicate_resolution_policy": DUPLICATE_RESOLUTION_POLICY,
+        "duplicate_resolution_digest": duplicate_resolution_digest(
+            duplicate_resolution
+        ),
+        "exact_duplicate_group_count": duplicate_group_count(
+            duplicate_resolution
+        ),
+        "exact_duplicate_file_count": len(duplicate_resolution),
+        "duplicate_resolution": duplicate_resolution,
         "deliverable_paths": paths,
         "catalog_rules": CATALOG_RULES,
         "catalog_rules_digest": sha256_json(CATALOG_RULES),
@@ -310,7 +329,7 @@ def main() -> int:
     except (PreflightError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps({key: output.get(key) for key in ("status", "client_id", "intake_id", "photo_count", "photo_set_digest", "catalog_rules_digest", "confirmed_by", "confirmed_at")}, indent=2))
+    print(json.dumps({key: output.get(key) for key in ("status", "client_id", "intake_id", "photo_count", "photo_set_digest", "exact_duplicate_group_count", "exact_duplicate_file_count", "duplicate_resolution_digest", "catalog_rules_digest", "confirmed_by", "confirmed_at")}, indent=2))
     return 0
 
 

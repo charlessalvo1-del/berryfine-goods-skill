@@ -80,6 +80,7 @@ def validate_categorized_set(
         )
 
     expected_files: set[Path] = set()
+    expected_hashes: dict[str, Path] = {}
     digest_entries: list[dict[str, Any]] = []
     groups: set[str] = set()
     assigned = 0
@@ -156,6 +157,13 @@ def validate_categorized_set(
             # immutable source and require the delivered copy to match it.
             expected_hash = sha256_file(source)
             legacy_recomputed += 1
+        prior_destination = expected_hashes.get(expected_hash)
+        if prior_destination is not None:
+            raise CategorizedInventoryError(
+                "Manifest assigns identical photo content to multiple categorized files: "
+                f"{prior_destination} and {destination}"
+            )
+        expected_hashes[expected_hash] = destination
         if sha256_file(destination) != expected_hash:
             raise CategorizedInventoryError(
                 f"Categorized photo content does not match source evidence: {destination}"

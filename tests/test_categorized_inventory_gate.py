@@ -105,6 +105,35 @@ class CategorizedInventoryGateTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("unexpected file", result.stderr)
 
+    def test_rejects_identical_content_in_multiple_categorized_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            command = self.prepare(root)
+            source = root / "source"
+            second_source = source / "IMG_0002.jpg"
+            second_source.write_bytes(b"photo")
+            categorized = root / "Categorized Inventory 2026-08-03"
+            second_group = categorized / "EX41 - Another example item"
+            second_group.mkdir()
+            (second_group / second_source.name).write_bytes(b"photo")
+            manifest = root / "manifest.json"
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["photos"].append(
+                {
+                    **payload["photos"][0],
+                    "sequence": 2,
+                    "relative_path": second_source.name,
+                    "filename": second_source.name,
+                    "group_id": second_group.name,
+                }
+            )
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = subprocess.run(command, text=True, capture_output=True)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("identical photo content", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

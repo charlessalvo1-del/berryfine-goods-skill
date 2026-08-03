@@ -108,24 +108,37 @@ def run(manifest_path: Path) -> dict[str, Any]:
                 raise PhotoQualityError("source content no longer matches manifest sha256")
             if int(photo.get("bytes", -1)) != result["bytes"]:
                 raise PhotoQualityError("source size no longer matches manifest bytes")
-            exact_duplicates[result["sha256"]].append(sequence)
+            status = str(photo.get("status", "pending")).casefold()
+            if status not in {"excluded", "separator", "missing"}:
+                exact_duplicates[result["sha256"]].append(sequence)
             records.append({"sequence": sequence, "relative_path": relative, **result})
         except (OSError, ValueError, PhotoQualityError) as exc:
             errors.append({"sequence": sequence, "relative_path": relative, "error": str(exc)})
 
-    duplicate_groups = [values for values in exact_duplicates.values() if len(values) > 1]
+    duplicate_groups = sorted(
+        (sorted(values) for values in exact_duplicates.values() if len(values) > 1),
+        key=lambda values: values[0],
+    )
+    duplicate_errors = [
+        {
+            "sequences": values,
+            "error": "manifest contains unresolved exact duplicate content",
+        }
+        for values in duplicate_groups
+    ]
+    all_errors = errors + duplicate_errors
     return {
         "version": 1,
         "client_id": manifest.get("client_id", ""),
         "intake_id": manifest.get("intake_id", ""),
         "manifest": str(manifest_path.resolve()),
-        "status": "PASS" if not errors else "FAIL",
+        "status": "PASS" if not all_errors else "FAIL",
         "photo_count": len(photos),
         "validated_photo_count": len(records),
-        "error_count": len(errors),
+        "error_count": len(all_errors),
         "exact_duplicate_group_count": len(duplicate_groups),
         "exact_duplicate_sequences": duplicate_groups,
-        "errors": errors,
+        "errors": all_errors,
         "photos": records,
     }
 
@@ -141,7 +154,12 @@ def main() -> int:
         print(json.dumps({key: result[key] for key in ("status", "photo_count", "validated_photo_count", "error_count", "exact_duplicate_group_count")}, indent=2))
         if result["status"] != "PASS":
             for error in result["errors"][:20]:
-                print(f"error: photo {error['sequence']}: {error['error']}", file=sys.stderr)
+                subject = (
+                    f"photo {error['sequence']}"
+                    if "sequence" in error
+                    else f"photos {error.get('sequences', [])}"
+                )
+                print(f"error: {subject}: {error['error']}", file=sys.stderr)
             if len(result["errors"]) > 20:
                 print(f"error: {len(result['errors']) - 20} additional photo errors are recorded in {args.output}", file=sys.stderr)
             return 2

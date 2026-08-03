@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from bfg_integrity import atomic_write_json, photo_set_digest, sha256_file
+from bfg_integrity import atomic_write_json, photo_set_digest, sha256_file, sha256_json
 
 
 IMAGE_EXTENSIONS = {
@@ -40,6 +40,10 @@ PHOTO_STATUSES = {
 PRESERVED_FIELDS = ("status", "item_id", "group_id", "role", "notes")
 INTAKE_METHODS = {"auto", "folders", "sequence"}
 DEFAULT_IGNORED_DIRS = {".git", "__pycache__", "categorized inventory", "output"}
+DUPLICATE_RESOLUTION_POLICY = "sha256-prefer-non-copy-name-then-natural-path-v1"
+COPY_STYLE_SUFFIX = re.compile(
+    r"(?i)(?:\s*-\s*copy(?:\s*\(\d+\))?|\s*\(\d+\)|[_-]copy)$"
+)
 
 
 class ManifestError(ValueError):
@@ -164,6 +168,56 @@ def scan_folder(
     return images, ignored_directories, ignored_files_report
 
 
+def duplicate_candidate_key(path: Path, root: Path) -> tuple[object, ...]:
+    relative = path.relative_to(root).as_posix()
+    natural = tuple(
+        f"{int(part):020d}" if part.isdigit() else part.casefold()
+        for part in re.split(r"(\d+)", relative)
+    )
+    return (1 if COPY_STYLE_SUFFIX.search(path.stem) else 0, natural)
+
+
+def resolve_exact_duplicates(
+    images: list[Path], root: Path
+) -> tuple[list[Path], list[dict[str, str]], dict[Path, str]]:
+    """Keep one deterministic path for each exact image hash without deleting sources."""
+    content_hashes = {path: sha256_file(path) for path in images}
+    by_hash: dict[str, list[Path]] = {}
+    for path in images:
+        by_hash.setdefault(content_hashes[path], []).append(path)
+
+    included: list[Path] = []
+    resolution: list[dict[str, str]] = []
+    for digest, members in by_hash.items():
+        ordered = sorted(members, key=lambda path: duplicate_candidate_key(path, root))
+        canonical = ordered[0]
+        included.append(canonical)
+        canonical_relative = canonical.relative_to(root).as_posix()
+        for redundant in ordered[1:]:
+            resolution.append(
+                {
+                    "relative_path": redundant.relative_to(root).as_posix(),
+                    "reason": "exact_duplicate",
+                    "canonical_path": canonical_relative,
+                    "sha256": digest,
+                }
+            )
+
+    included.sort(key=lambda path: natural_key(path.relative_to(root).as_posix()))
+    resolution.sort(key=lambda entry: natural_key(entry["relative_path"]))
+    return included, resolution, content_hashes
+
+
+def duplicate_resolution_digest(resolution: list[dict[str, str]]) -> str:
+    return sha256_json(
+        {"policy": DUPLICATE_RESOLUTION_POLICY, "redundant_files": resolution}
+    )
+
+
+def duplicate_group_count(resolution: list[dict[str, str]]) -> int:
+    return len({entry["sha256"] for entry in resolution})
+
+
 def proposed_group_id(path: Path, root: Path, intake_method: str) -> str:
     if intake_method != "folders":
         return ""
@@ -174,7 +228,11 @@ def proposed_group_id(path: Path, root: Path, intake_method: str) -> str:
 
 
 def make_entry(
-    path: Path, root: Path, sequence: int, intake_method: str
+    path: Path,
+    root: Path,
+    sequence: int,
+    intake_method: str,
+    content_sha256: str = "",
 ) -> dict[str, Any]:
     stat = path.stat()
     return {
@@ -183,7 +241,7 @@ def make_entry(
         "filename": path.name,
         "extension": path.suffix.casefold(),
         "bytes": stat.st_size,
-        "sha256": sha256_file(path),
+        "sha256": content_sha256 or sha256_file(path),
         "modified_at": datetime.fromtimestamp(
             stat.st_mtime, tz=timezone.utc
         ).replace(microsecond=0).isoformat(),
@@ -242,9 +300,14 @@ def refresh_manifest(
 
     normalized_ignored_dirs = normalize_ignored_dirs(ignored_dirs or [])
     normalized_ignored_files = normalize_ignored_files(ignored_files or [])
-    images, ignored_directories, ignored_files = scan_folder(
+    scanned_images, ignored_directories, ignored_files = scan_folder(
         photos_folder, normalized_ignored_dirs, normalized_ignored_files
     )
+    images, duplicate_resolution, content_hashes = resolve_exact_duplicates(
+        scanned_images, photos_folder
+    )
+    ignored_files.extend(duplicate_resolution)
+    ignored_files.sort(key=lambda entry: natural_key(entry["relative_path"]))
     has_nested_images = any(
         len(path.relative_to(photos_folder).parts) > 1 for path in images
     )
@@ -259,7 +322,13 @@ def refresh_manifest(
     current_paths: set[str] = set()
     refreshed: list[dict[str, Any]] = []
     for sequence, path in enumerate(images, start=1):
-        entry = make_entry(path, photos_folder, sequence, intake_method)
+        entry = make_entry(
+            path,
+            photos_folder,
+            sequence,
+            intake_method,
+            content_hashes[path],
+        )
         relative_path = entry["relative_path"]
         current_paths.add(relative_path)
         previous = old_by_path.get(relative_path)
@@ -310,6 +379,11 @@ def refresh_manifest(
         raise ManifestError(
             "Included photo set changed after preflight confirmation; create and confirm a new preflight lock"
         )
+    current_duplicate_digest = duplicate_resolution_digest(duplicate_resolution)
+    if current_duplicate_digest != preflight.get("duplicate_resolution_digest"):
+        raise ManifestError(
+            "Exact duplicate set changed after preflight confirmation; create and confirm a new preflight lock"
+        )
 
     now = utc_now()
     manifest = {
@@ -329,6 +403,11 @@ def refresh_manifest(
         "ignored_file_rules": normalized_ignored_files,
         "ignored_directories": ignored_directories,
         "ignored_files": ignored_files,
+        "duplicate_resolution_policy": DUPLICATE_RESOLUTION_POLICY,
+        "duplicate_resolution_digest": current_duplicate_digest,
+        "exact_duplicate_group_count": duplicate_group_count(duplicate_resolution),
+        "exact_duplicate_file_count": len(duplicate_resolution),
+        "duplicate_resolution": duplicate_resolution,
         "created_at": (existing or {}).get("created_at", now),
         "updated_at": now,
         "batch_limits": {"max_photos": 24, "max_candidate_objects": 24},
@@ -343,6 +422,8 @@ def refresh_manifest(
                 int(entry["image_count"]) for entry in ignored_directories
             ),
             "ignored_files": len(ignored_files),
+            "exact_duplicate_groups": duplicate_group_count(duplicate_resolution),
+            "exact_duplicate_files": len(duplicate_resolution),
         },
     }
     atomic_write_json(output_path, manifest)
