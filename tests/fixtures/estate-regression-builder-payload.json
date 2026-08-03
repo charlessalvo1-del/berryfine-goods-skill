@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "client_name": "Example Estate Regression",
+  "intake_id": "estate-regression-v2",
+  "catalog_rows": [
+    {
+      "sku": "ER-SELL",
+      "item_id": "BFG-REGRESSION-0001",
+      "description": "Regression item - sell",
+      "quantity": 1,
+      "estimated_value": 75.0,
+      "consign_length": "Standard",
+      "history_info": "Completed-sale evidence supports the tested quick-sale value.",
+      "recommended_action": "SELL"
+    },
+    {
+      "sku": "ER-DONATE",
+      "item_id": "BFG-REGRESSION-0002",
+      "description": "Regression item - donate",
+      "quantity": 1,
+      "estimated_value": 25.0,
+      "consign_length": "N/A",
+      "history_info": "Completed-sale evidence supports donation below the threshold.",
+      "recommended_action": "DONATE"
+    },
+    {
+      "sku": "ER-REVIEW",
+      "item_id": "BFG-REGRESSION-0003",
+      "description": "Regression item - review",
+      "quantity": 1,
+      "estimated_value": 65.0,
+      "consign_length": "Pending",
+      "history_info": "Identification evidence is insufficient; no disposal action is authorized.",
+      "recommended_action": "REVIEW"
+    },
+    {
+      "sku": "ER-CONFIRM",
+      "item_id": "BFG-REGRESSION-0004",
+      "description": "Regression item - confirm donation",
+      "quantity": 1,
+      "estimated_value": 45.0,
+      "consign_length": "Pending",
+      "history_info": "Value is in the $40.00-$49.99 confirmation band.",
+      "recommended_action": "CONFIRM DONATION"
+    }
+  ],
+  "exceptions": [
+    {
+      "sku": "ER-REVIEW",
+      "item_id": "BFG-REGRESSION-0003",
+      "photo_references": "fixture-photo-3.jpg",
+      "description": "Regression item - review",
+      "exception_category": "Identification uncertainty",
+      "issue": "Exact model cannot be supported by the available evidence.",
+      "required_action": "Retain for evidence review; do not list or donate.",
+      "status": "OPEN",
+      "resolution_notes": "",
+      "resolution_date": ""
+    },
+    {
+      "sku": "ER-CONFIRM",
+      "item_id": "BFG-REGRESSION-0004",
+      "photo_references": "fixture-photo-4.jpg",
+      "description": "Regression item - confirm donation",
+      "exception_category": "Donation confirmation",
+      "issue": "Quick-sale value falls in the $40.00-$49.99 confirmation band.",
+      "required_action": "Confirm that the item will not be sold before donation.",
+      "status": "OPEN",
+      "resolution_notes": "",
+      "resolution_date": ""
+    }
+  ]
+}

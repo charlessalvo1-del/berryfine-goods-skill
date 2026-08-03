@@ -1,0 +1,4 @@
+interface:
+  display_name: "Berryfine Goods Skill"
+  short_description: "Build verified catalogs from inventory photos"
+  default_prompt: "Use $berryfine-goods-skill to preflight and hash-lock this intake, group and identify photographed items, research sold comps, assign SELL, DONATE, REVIEW, or CONFIRM DONATION, preserve historical catalog data and colors, and produce verified client deliverables."

@@ -1,0 +1,5 @@
+intake_id,item_id,decision
+estate-regression-v2,BFG-REGRESSION-0001,SELL
+estate-regression-v2,BFG-REGRESSION-0002,DONATE
+estate-regression-v2,BFG-REGRESSION-0003,REVIEW
+estate-regression-v2,BFG-REGRESSION-0004,CONFIRM DONATION

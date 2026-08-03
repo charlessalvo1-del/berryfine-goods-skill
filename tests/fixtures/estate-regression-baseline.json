@@ -1,0 +1,20 @@
+{
+  "intake_id": "estate-regression-legacy",
+  "observed_on": "2026-08-02",
+  "expected_blockers": [
+    "RETAINED_TEMPLATE_CELL_CHANGED",
+    "PREFLIGHT_MISSING",
+    "PHOTO_HASHES_MISSING",
+    "GROUPING_NOT_BOUND",
+    "EXCEPTIONS_NOT_IN_MAIN_CLIENT_FOLDER",
+    "CATALOG_AND_EXCEPTIONS_SPLIT",
+    "BORDERLINE_POLICY_VIOLATION",
+    "UNSUPPORTED_DISPOSITION"
+  ],
+  "known_grouping_corrections": [
+    "Split two visually distinct glassware styles",
+    "Split an unrelated figurine from a multi-piece collectible lot",
+    "Split bowls, dinner plates, and salad plates into separate inventory items",
+    "Exclude non-inventory screenshots"
+  ]
+}
