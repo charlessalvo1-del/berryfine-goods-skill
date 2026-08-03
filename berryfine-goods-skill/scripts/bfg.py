@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import platform
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -35,16 +36,73 @@ def read_json(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def stdlib_sqlite_available() -> bool:
+    try:
+        import sqlite3
+    except ImportError:
+        return False
+    try:
+        connection = sqlite3.connect(":memory:")
+        connection.execute("SELECT 1").fetchone()
+        connection.close()
+    except sqlite3.Error:
+        return False
+    return True
+
+
+def detect_desktop_excel() -> tuple[bool | None, str]:
+    if platform.system() != "Windows":
+        return False, "Desktop Excel COM registration is available only on Windows."
+
+    try:
+        import winreg
+    except ImportError:
+        return None, "Windows registry access is unavailable; desktop Excel detection is indeterminate."
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Excel.Application\CLSID") as key:
+            clsid = str(winreg.QueryValueEx(key, None)[0]).strip()
+        if not clsid:
+            return None, "Excel.Application is registered without a CLSID; detection is indeterminate."
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"CLSID\{clsid}\LocalServer32") as key:
+            command = str(winreg.QueryValueEx(key, None)[0]).strip()
+    except FileNotFoundError:
+        return False, "No desktop Excel COM registration was found."
+    except OSError as exc:
+        return None, f"Desktop Excel registry detection was indeterminate: {exc}."
+
+    executable_match = re.match(r'^\s*"([^"]+\.exe)"|^\s*(.+?\.exe)(?:\s|$)', command, re.IGNORECASE)
+    executable = next(
+        (group for group in executable_match.groups() if group), ""
+    ) if executable_match else ""
+    if not executable:
+        return None, "Excel COM registration has no executable path; detection is indeterminate."
+    if not Path(executable).is_file():
+        return False, f"Excel COM registration points to a missing executable: {executable}."
+    return True, f"Desktop Excel COM registration points to: {executable}."
+
+
 def doctor() -> dict[str, Any]:
+    excel_available, excel_detection = detect_desktop_excel()
     checks = {
         "python_supported": sys.version_info >= (3, 11),
         "python_version": platform.python_version(),
         "windows": platform.system() == "Windows",
         "powershell_available": bool(shutil.which("pwsh") or shutil.which("powershell")),
-        "stdlib_sqlite_available": True,
+        "desktop_excel_available": excel_available,
+        "desktop_excel_detection": excel_detection,
+        "stdlib_sqlite_available": stdlib_sqlite_available(),
     }
-    checks["status"] = "PASS" if checks["python_supported"] and checks["powershell_available"] else "FAIL"
-    checks["excel_builder_note"] = "Run catalog_builder.ps1 only on a Windows PC with desktop Excel; otherwise use the Codex spreadsheet workflow."
+    checks["core_workflow_ready"] = bool(
+        checks["python_supported"] and checks["stdlib_sqlite_available"]
+    )
+    checks["exact_excel_builder_ready"] = bool(
+        checks["core_workflow_ready"]
+        and checks["windows"]
+        and checks["powershell_available"]
+        and checks["desktop_excel_available"] is True
+    )
+    checks["status"] = "PASS" if checks["core_workflow_ready"] else "FAIL"
     return checks
 
 
@@ -106,6 +164,10 @@ def legacy_audit(args: argparse.Namespace) -> dict[str, Any]:
         findings.append({"code": "PHOTO_HASHES_MISSING", "message": f"{missing_hashes} photo records lack SHA-256."})
     if not args.preflight.is_file():
         findings.append({"code": "PREFLIGHT_MISSING", "message": "Confirmed preflight lock is absent."})
+    else:
+        preflight = read_json(args.preflight)
+        if preflight.get("status") != "CONFIRMED" or not preflight.get("confirmed_by"):
+            findings.append({"code": "PREFLIGHT_NOT_CONFIRMED", "message": "Preflight exists but is not explicitly confirmed by a human."})
     if not manifest.get("grouping_binding"):
         findings.append({"code": "GROUPING_NOT_BOUND", "message": "Final grouping was not hash-bound back into the manifest."})
     with args.ledger.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -122,12 +184,26 @@ def legacy_audit(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="BFG workflow diagnostics and status audit.")
+    parser = argparse.ArgumentParser(
+        description="BFG workflow diagnostics and status audit.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Full intake completion sequence (repository root):\n"
+            "  python .\\berryfine-goods-skill\\scripts\\catalog_gate.py ...\n"
+            "  python .\\berryfine-goods-skill\\scripts\\delivery_gate.py --workflow full-intake ...\n"
+            "  python .\\berryfine-goods-skill\\scripts\\bfg.py audit ...\n"
+            "Legacy refresh completion sequence (repository root):\n"
+            "  python .\\berryfine-goods-skill\\scripts\\catalog_gate.py ...\n"
+            "  python .\\berryfine-goods-skill\\scripts\\bfg.py legacy-audit ...\n"
+            "  python .\\berryfine-goods-skill\\scripts\\delivery_gate.py --workflow legacy-catalog-refresh ...\n"
+            "All applicable commands must return PASS. Audit does not replace delivery."
+        ),
+    )
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("doctor")
-    audit_parser = commands.add_parser("audit")
+    commands.add_parser("doctor", help="Report core Python readiness and separate exact Excel-builder readiness without launching Excel.")
+    audit_parser = commands.add_parser("audit", help="Run the final aggregate full-intake artifact and workflow-status audit after delivery_gate.py passes.")
     audit_parser.add_argument("--client-folder", required=True, type=Path); audit_parser.add_argument("--records", required=True, type=Path); audit_parser.add_argument("--categorized", required=True, type=Path); audit_parser.add_argument("--client-name", required=True); audit_parser.add_argument("--intake-id", required=True); audit_parser.add_argument("--output", type=Path)
-    legacy = commands.add_parser("legacy-audit")
+    legacy = commands.add_parser("legacy-audit", help="Validate retained evidence and policy-only refresh conditions; do not use the full-intake audit for a legacy refresh.")
     legacy.add_argument("--manifest", required=True, type=Path); legacy.add_argument("--preflight", required=True, type=Path); legacy.add_argument("--ledger", required=True, type=Path); legacy.add_argument("--intake-id", required=True); legacy.add_argument("--catalog", required=True, type=Path); legacy.add_argument("--exceptions", required=True, type=Path); legacy.add_argument("--output", type=Path)
     return parser
 

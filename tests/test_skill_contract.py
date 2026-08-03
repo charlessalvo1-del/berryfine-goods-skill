@@ -145,6 +145,25 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("destination-only digest", self.guide_text)
         self.assertIn("main client folder", self.guide_text)
 
+    def test_repository_root_completion_commands_are_explicit(self) -> None:
+        for text in (self.skill_text, self.guide_text):
+            self.assertIn(r"python .\berryfine-goods-skill\scripts\catalog_gate.py", text)
+            self.assertIn(r"python .\berryfine-goods-skill\scripts\delivery_gate.py --workflow full-intake", text)
+            self.assertIn(r"python .\berryfine-goods-skill\scripts\bfg.py audit", text)
+            self.assertIn(r"python .\berryfine-goods-skill\scripts\bfg.py legacy-audit", text)
+            self.assertIn(r"delivery_gate.py --workflow legacy-catalog-refresh", text)
+            self.assertIn("does not replace", text)
+
+    def test_exact_excel_builder_requirements_are_documented(self) -> None:
+        for text in (self.skill_text, self.guide_text):
+            self.assertIn("catalog_builder.ps1", text)
+            self.assertIn("Windows", text)
+            self.assertIn("PowerShell", text)
+            self.assertIn("desktop Microsoft Excel", text)
+            self.assertIn("Excel COM", text)
+            self.assertIn("cannot claim exact compatibility", text)
+            self.assertIn("does not replace deterministic gates", text)
+
 
 if __name__ == "__main__":
     unittest.main()

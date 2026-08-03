@@ -1,3 +1,5 @@
+# Reference exact-format builder. Requires Windows, PowerShell, desktop Microsoft
+# Excel, and registered Excel COM automation. It never runs as a generic XLSX writer.
 param(
     [Parameter(Mandatory=$true)][string]$TemplatePath,
     [Parameter(Mandatory=$true)][string]$PayloadPath,
