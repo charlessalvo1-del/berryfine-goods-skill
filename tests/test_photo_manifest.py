@@ -127,6 +127,69 @@ class PhotoManifestTests(unittest.TestCase):
                 [{"relative_path": "notes.txt", "reason": "unsupported_extension"}],
             )
 
+    def test_exact_duplicates_are_deterministically_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            photos = root / "photos"
+            photos.mkdir()
+            (photos / "item.jpg").write_bytes(b"same-photo")
+            (photos / "item - Copy.jpg").write_bytes(b"same-photo")
+            output = root / "manifest.json"
+
+            result = self.run_scan(photos, output)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual([photo["filename"] for photo in manifest["photos"]], ["item.jpg"])
+            self.assertEqual(manifest["exact_duplicate_group_count"], 1)
+            self.assertEqual(manifest["exact_duplicate_file_count"], 1)
+            self.assertEqual(
+                manifest["duplicate_resolution"],
+                [
+                    {
+                        "relative_path": "item - Copy.jpg",
+                        "reason": "exact_duplicate",
+                        "canonical_path": "item.jpg",
+                        "sha256": manifest["photos"][0]["sha256"],
+                    }
+                ],
+            )
+            self.assertEqual(manifest["ignored_files"], manifest["duplicate_resolution"])
+
+    def test_duplicate_set_change_invalidates_confirmed_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            photos = root / "photos"
+            photos.mkdir()
+            (photos / "item.jpg").write_bytes(b"same-photo")
+            duplicate = photos / "item (1).jpg"
+            duplicate.write_bytes(b"same-photo")
+            output = root / "manifest.json"
+            self.assertEqual(self.run_scan(photos, output).returncode, 0)
+
+            duplicate.unlink()
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "scan",
+                    "--photos", str(photos),
+                    "--output", str(output),
+                    "--client-id", "client-a",
+                    "--client-name", "Example Client",
+                    "--intake-id", "intake-a",
+                    "--catalog-template", str(root / "template.xlsx"),
+                    "--preflight-lock", str(root / "preflight-1.json"),
+                    "--intake-method", "auto",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("duplicate set changed", result.stderr.lower())
+
     def test_ignores_named_archive_directory_and_reports_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -160,6 +223,8 @@ class PhotoManifestTests(unittest.TestCase):
                     "ignored_directories": 1,
                     "ignored_directory_images": 1,
                     "ignored_files": 1,
+                    "exact_duplicate_groups": 0,
+                    "exact_duplicate_files": 0,
                 },
             )
 

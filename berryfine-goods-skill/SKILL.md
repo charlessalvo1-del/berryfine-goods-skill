@@ -47,6 +47,7 @@ Report:
 - the exact active photo-folder path, image count, extension counts, and whether it is flat or nested
 - the exact catalog-template path, SHA-256 hash, worksheet names, used dimensions, and detected header row
 - every sibling archive, prior-test, categorized-output, manifest, catalog, and exception artifact that will be excluded
+- the count of exact duplicate hash groups, the canonical file retained for each group, and every redundant path that will be automatically excluded without deleting source files
 - the proposed client name, intake ID, intake method, deliverable names, dated categorized-folder name, and centralized iteration records folder
 - the complete catalog rules for this run: preserve every pre-populated row and its existing `LOCATION`; write `Storage` only for newly appended rows; keep detailed responses in H; preserve I; add `RECOMMENDED ACTION` in J; apply the current-row fill rules; and use `SELL` at $50 or more, `CONFIRM DONATION` from $40 through $49.99, `DONATE` below $40, and `REVIEW` only for independent uncertainty
 
@@ -89,7 +90,9 @@ Create or refresh the resumable manifest:
 python scripts/photo_manifest.py scan --photos <client-photo-folder> --output "<records-root>\<Client Folder Name>\<intake-id>\intake-manifest.json" --client-id <client-id> --client-name "<client-name>" --intake-id <intake-id> --catalog-template <template.xlsx> --preflight-lock "<records-root>\<Client Folder Name>\<intake-id>\preflight-lock.json" --intake-method auto
 ```
 
-Immediately run `scripts/photo_quality_gate.py`. Do not begin grouping or identification unless every included photo has a valid image signature, byte count, and SHA-256 match. Treat exact duplicates as warnings that require grouping awareness; never silently delete them.
+Before confirmation, resolve exact duplicate image content deterministically across the selected source folder. Keep one canonical path per SHA-256 hash, prefer a filename without a copy-style suffix, then use natural path order as the tie-breaker. Record each redundant path, its canonical path, and its hash in the preflight; exclude the redundant path from the active manifest without deleting or renaming any source file. Bind the resolution digest and counts into the confirmed preflight. Any added, removed, renamed, or changed duplicate after confirmation requires a new preflight.
+
+Immediately run `scripts/photo_quality_gate.py`. Do not begin grouping or identification unless every included photo has a valid image signature, byte count, and SHA-256 match and the active manifest contains no repeated content hash. Treat an unresolved exact duplicate as a hard blocker, not a warning.
 
 When the client folder also contains archives, earlier tests, exports, or unrelated material, add one repeatable `--ignore-dir <name-or-relative-path>` argument per excluded directory. Use repeatable `--ignore-file <filename-or-relative-glob>` arguments for known screenshots or other image files that are not inventory evidence. Prefer exact filenames to broad globs. Confirm all exclusion counts and paths in the manifest before analyzing photos. Never depend on filename extensions alone to exclude an archive or screenshot that contains images.
 
@@ -121,7 +124,7 @@ Analyze no more than 24 photos or 24 candidate objects in one AI pass. Commit re
 
 `photos discovered = photos assigned + separator photos + excluded photos + unresolved photos`
 
-Never silently discard a blurry, duplicate, unsupported, or unassigned image. Record its status and reason.
+Never silently discard a blurry, duplicate, unsupported, or unassigned image. Record its status and reason. Keep exact duplicate source files untouched and retain their canonical-path mapping in the preflight and manifest audit records.
 
 After grouping is locked, create an identity map containing one stable `item_id`, catalog `sku`, and Windows-safe `group_id` per ordinal. Run `scripts/apply_grouping.py` to bind the final grouping into the manifest and create `grouping-reconciliation.json`. Do not hand-edit assignments after this step.
 
@@ -159,7 +162,7 @@ After all included photos are assigned, create the client-facing categorized pho
 python scripts/organize_photos.py --manifest <intake-manifest.json> --output "<client-folder>\Categorized Inventory <YYYY-MM-DD>"
 ```
 
-Use the intake or processing date in ISO format for the categorized-folder suffix. Before organizing photos, set each final manifest `group_id` to the unique Windows-safe catalog identity `<SKU> - <DESCRIPTION>` using the exact column B SKU and a concise form of the column C description. Use that `group_id` as the categorized item-folder name. Never use column D `LOCATION` as the item-folder name; retained rows keep their original locations and new rows use `Storage`. Copy photos; never move or rename the originals. Stop if a group ID is blank or duplicated, any photo remains unassigned, or a destination contains a conflicting file. Dated `Categorized Inventory` folders are ignored by later manifest scans to prevent duplicate counting. Include this directory with the catalog and exception workbook in every completed batch handoff.
+Use the intake or processing date in ISO format for the categorized-folder suffix. Before organizing photos, set each final manifest `group_id` to the unique Windows-safe catalog identity `<SKU> - <DESCRIPTION>` using the exact column B SKU and a concise form of the column C description. Use that `group_id` as the categorized item-folder name. Never use column D `LOCATION` as the item-folder name; retained rows keep their original locations and new rows use `Storage`. Copy photos; never move or rename the originals. Stop if a group ID is blank or duplicated, any photo remains unassigned, an active SHA-256 hash appears more than once, or a destination contains a conflicting file. Dated `Categorized Inventory` folders are ignored by later manifest scans to prevent duplicate counting. Include this directory with the catalog and exception workbook in every completed batch handoff.
 
 ## Inspect and identify
 

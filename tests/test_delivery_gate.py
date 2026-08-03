@@ -191,6 +191,42 @@ class DeliveryGateTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("does not match manifest", result.stderr)
 
+    def test_identical_content_in_multiple_categorized_paths_blocks_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            command = self.prepare(root)
+            categorized = root / "Example Client" / "Categorized Inventory 2026-08-02"
+            second_group = categorized / "EX41 - Another example item"
+            second_group.mkdir()
+            (second_group / "IMG_0002.jpg").write_bytes(b"photo")
+
+            manifest = root / "manifest.json"
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            second = {
+                **payload["photos"][0],
+                "sequence": 2,
+                "relative_path": "IMG_0002.jpg",
+                "group_id": second_group.name,
+            }
+            payload["photos"].append(second)
+            payload["photo_set_digest"] = json_hash(
+                [
+                    {key: photo[key] for key in ("sequence", "relative_path", "bytes", "sha256")}
+                    for photo in payload["photos"]
+                ]
+            )
+            preflight = root / "preflight-lock.json"
+            lock = json.loads(preflight.read_text(encoding="utf-8"))
+            lock["photo_set_digest"] = payload["photo_set_digest"]
+            preflight.write_text(json.dumps(lock), encoding="utf-8")
+            payload["preflight_lock_sha256"] = file_hash(preflight)
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = subprocess.run(command, text=True, capture_output=True, check=False)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("identical photo content", result.stderr)
+
     def test_stale_catalog_verification_blocks_completion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

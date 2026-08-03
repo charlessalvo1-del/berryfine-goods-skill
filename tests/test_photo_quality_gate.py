@@ -40,6 +40,63 @@ class PhotoQualityGateTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("missing sha256", result.stderr)
 
+    def test_rejects_unresolved_exact_duplicate_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, output = self.prepare(root)
+            photos = root / "photos"
+            duplicate = photos / "item-copy.png"
+            duplicate.write_bytes((photos / "item.png").read_bytes())
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["photos"].append(
+                {
+                    **payload["photos"][0],
+                    "sequence": 2,
+                    "relative_path": duplicate.name,
+                }
+            )
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--output", str(output)],
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("unresolved exact duplicate", result.stderr)
+            report = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(report["exact_duplicate_group_count"], 1)
+
+    def test_documented_excluded_duplicate_does_not_block_active_photos(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, output = self.prepare(root)
+            photos = root / "photos"
+            duplicate = photos / "excluded-copy.png"
+            duplicate.write_bytes((photos / "item.png").read_bytes())
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["photos"].append(
+                {
+                    **payload["photos"][0],
+                    "sequence": 2,
+                    "relative_path": duplicate.name,
+                    "status": "excluded",
+                    "notes": "Documented redundant evidence",
+                }
+            )
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--output", str(output)],
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(report["exact_duplicate_group_count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,6 +85,8 @@ The client-level ledger spans all iterations. Each intake-ID folder preserves th
 
 Before modifying source evidence or writing client-facing deliverables, inspect the client folder read-only and report the selected photo folder and template workbook, photo and extension counts, flat-versus-nested structure, workbook hash and sheet structure, and every prior-run directory or artifact that will be excluded. Propose a new intake ID, dated categorized-folder name, exact client-facing deliverable names, and exact centralized records folder `C:\BFG Bulk Import Records\<Client Folder Name>\<intake-id>`. The sole permitted pre-confirmation write is the PENDING preflight record in the centralized audit folder.
 
+Hash the selected images during preflight and automatically resolve exact duplicates before confirmation. For each SHA-256 group, retain one canonical path, preferring a filename without a copy-style suffix and then natural path order. Report the group count, retained canonical path, and every redundant path. Record redundant files as `exact_duplicate` exclusions in the preflight and manifest without moving, renaming, or deleting the originals. Bind the resolution digest into the confirmation so any later duplicate-set change invalidates the run.
+
 Also state the full catalog rules: preserve pre-populated rows and their existing `LOCATION` values; use `Storage` only on new rows; place detailed responses in H; preserve I; add `RECOMMENDED ACTION` in J; apply the action-fill rules; and use `SELL` at $50 or more, `CONFIRM DONATION` from $40 through $49.99, `DONATE` below $40, and `REVIEW` only for independent uncertainty. Explicitly ask the user to confirm these catalog rules. A generic preflight confirmation that does not state them is not sufficient.
 
 Create a PENDING `preflight-lock.json` with `scripts/preflight_lock.py create`, pause, and obtain explicit user confirmation. Record the confirmation with `scripts/preflight_lock.py confirm`; never invent the confirming identity. The confirmed lock binds the exact source photo hashes, template hash, exclusions, output paths, and catalog rules. Any change requires a new lock. A new test must not reuse a prior manifest, folder assignment, catalog, exception workbook, identification, valuation, or categorized directory. Prior results may be compared only after the independent run is complete unless the user explicitly requests a baseline-assisted run.
@@ -227,6 +229,8 @@ The scanner:
 - assigns every nested photo to its immediate top-level item folder
 - sorts folders and photos naturally by relative path
 - records relative path, size, timestamp, SHA-256, and processing state
+- keeps one deterministic canonical path per exact SHA-256 hash and records every redundant copy as an automatic `exact_duplicate` exclusion
+- binds the duplicate-resolution policy, mapping, counts, and digest to the confirmed preflight and manifest
 - preserves prior item assignments only when the file content hash is unchanged; changed content resets to pending
 - marks new and missing files without deleting history
 - writes atomically
@@ -272,7 +276,7 @@ After every included photo has an `assigned` status and unique spreadsheet-match
 python scripts/organize_photos.py --manifest <manifest.json> --output "<client-folder>\Categorized Inventory <YYYY-MM-DD>"
 ```
 
-Use the intake or processing date in ISO format. Set each final `group_id` and nested item-folder name to the Windows-safe `<SKU> - <DESCRIPTION>` identity from catalog columns B and C. Never use column D as the folder name; retained locations may vary and new rows use `Storage`. Reject blank, duplicate, reserved, absolute, or path-traversing group IDs and relative paths. The script copies files, verifies every source and destination SHA-256 against the manifest, and preserves the flat originals. Use `--resume` only to verify and complete an existing categorized directory; a same-name file with different contents is a hard failure.
+Use the intake or processing date in ISO format. Set each final `group_id` and nested item-folder name to the Windows-safe `<SKU> - <DESCRIPTION>` identity from catalog columns B and C. Never use column D as the folder name; retained locations may vary and new rows use `Storage`. Reject blank, duplicate, reserved, absolute, or path-traversing group IDs and relative paths. Reject any active SHA-256 hash assigned to more than one categorized destination. The script copies files, verifies every source and destination SHA-256 against the manifest, and preserves the flat originals. Use `--resume` only to verify and complete an existing categorized directory; a same-name file with different contents is a hard failure.
 
 ## Client catalog column contract
 

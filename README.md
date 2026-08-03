@@ -1,6 +1,6 @@
 # Berryfine Goods Skill
 
-Version 2.1.2 requires a legacy catalog refresh to retain and verify the source intake's categorized-photo delivery in the main client folder. The refresh still preserves completed identification, valuation, and research, applies only deterministic disposition-policy migrations, rebuilds the paired workbooks from the original template, and cannot authorize listings. It performs one categorized-set verification and one destination-only delivery digest, without rerunning image grouping, AI review, or research.
+Version 2.2.0 automatically resolves exact duplicate source photos during preflight, retains one deterministic canonical file per content hash, records redundant paths without deleting source evidence, and blocks unresolved duplicate hashes at every downstream photo-delivery gate. Legacy catalog refreshes still preserve completed identification, valuation, and research, apply only deterministic disposition-policy migrations, rebuild the paired workbooks from the original template, and cannot authorize listings.
 
 The release also supports bulk, unnumbered photo intake with real image-signature and hash validation, blind-review provenance, deterministic grouping application, structured completed-sale evidence, automatic catalog/Exceptions payloads, reusable Excel automation, immutable audit seals, outcome tracking, and a single workflow audit command. Warehouse tracking is intentionally outside this repository and remains a separate future system.
 
@@ -50,6 +50,9 @@ separately and does not cause `REVIEW` by itself.
 - Leave new `SELL` rows unfilled. Apply solid yellow `#FFFF00` across A:J to new
   `DONATE`, `REVIEW`, and `CONFIRM DONATION` rows.
 - Require a confirmed, hash-bound preflight lock before manifest creation.
+- Resolve exact duplicate hashes before confirmation, retain the non-copy-style
+  filename when available, record every redundant path, and invalidate the run
+  if the duplicate set changes.
 - Hash every source photo, bind every sequence-review pass to the exact photo
   set, reject path traversal, and verify categorized copies byte-for-byte.
 - Run the deterministic catalog gate before the delivery gate. Delivery fails
@@ -70,7 +73,8 @@ iterations.
 ## Operating workflow
 
 1. Inspect the selected photo folder, catalog template, prior-run exclusions,
-   client name, intake ID, and proposed output paths without changing them.
+   duplicate resolution, client name, intake ID, and proposed output paths
+   without changing source files.
 2. Create a PENDING preflight lock, state all catalog rules, and obtain explicit
    confirmation from the user. Record the real confirming identity.
 3. Create the photo manifest. Any photo, template, exclusion, path, or rules

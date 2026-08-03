@@ -36,6 +36,19 @@ class ApplyGroupingTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("unassigned", result.stderr)
 
+    def test_rejects_distinct_sequences_with_identical_content_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); digest = "c" * 64; photo_hash = "d" * 64
+            manifest = root / "m.json"; grouping = root / "g.json"; identities = root / "i.json"
+            manifest.write_text(json.dumps({"client_id": "c", "intake_id": "i", "photo_set_digest": digest, "photos": [{"sequence": 1, "status": "pending", "sha256": photo_hash}, {"sequence": 2, "status": "pending", "sha256": photo_hash}]}), encoding="utf-8")
+            grouping.write_text(json.dumps({"client_id": "c", "intake_id": "i", "manifest_photo_digest": digest, "groups": [{"ordinal": 1, "sequences": [1, 2]}]}), encoding="utf-8")
+            identities.write_text(json.dumps({"groups": [{"ordinal": 1, "item_id": "x", "sku": "X", "group_id": "X - One"}]}), encoding="utf-8")
+
+            result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", str(manifest), "--grouping", str(grouping), "--identities", str(identities), "--reconciliation", str(root / "r.json")], text=True, capture_output=True)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("unresolved exact duplicate", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

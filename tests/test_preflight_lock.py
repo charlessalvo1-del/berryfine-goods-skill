@@ -66,6 +66,25 @@ class PreflightLockTests(unittest.TestCase):
             self.assertEqual(record["confirmed_by"], "Test Reviewer")
             self.assertTrue(record["confirmed_at"])
 
+    def test_preflight_hash_binds_automatic_duplicate_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            photos, template, lock = self.prepare(root)
+            (photos / "IMG_0001 - Copy.jpg").write_bytes(b"photo")
+
+            created = self.create(root, photos, template, lock)
+
+            self.assertEqual(created.returncode, 0, created.stderr)
+            pending = json.loads(lock.read_text(encoding="utf-8"))
+            self.assertEqual(pending["photo_count"], 1)
+            self.assertEqual(pending["exact_duplicate_group_count"], 1)
+            self.assertEqual(pending["exact_duplicate_file_count"], 1)
+            self.assertEqual(len(pending["duplicate_resolution_digest"]), 64)
+            self.assertEqual(
+                pending["duplicate_resolution"][0]["canonical_path"],
+                "IMG_0001.jpg",
+            )
+
     def test_rejects_generic_confirmation_and_confirmed_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
