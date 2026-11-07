@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate one-record-per-comparable research evidence against the inventory ledger."""
+"""Fail closed when item-specific research is absent, shallow, or unreconciled."""
 
 from __future__ import annotations
 
@@ -7,9 +7,11 @@ import argparse
 import csv
 import json
 import math
+import re
 import statistics
 import sys
-from datetime import date
+from collections import defaultdict
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -18,25 +20,41 @@ from bfg_integrity import atomic_write_json, sha256_file
 
 
 class ResearchError(ValueError):
-    """Raised when valuation evidence is incomplete, contradictory, or unsafe."""
+    """Raised when valuation evidence is malformed or unsafe."""
 
 
 REQUIRED_COMP_FIELDS = {
-    "comp_id",
-    "marketplace",
-    "source_url",
-    "transaction_status",
-    "sale_date",
-    "sold_price",
-    "shipping",
-    "currency",
-    "condition",
-    "comparability",
-    "included",
-    "include_reason",
-    "captured_at",
+    "comp_id", "title", "marketplace", "source_url", "transaction_status",
+    "sale_date", "sold_price", "shipping", "currency", "condition",
+    "comparability", "included", "include_reason", "captured_at",
+}
+REQUIRED_ATTEMPT_FIELDS = {
+    "attempt_id", "query", "strategy", "surface", "search_url", "result_count",
+    "result_urls", "opened_urls", "outcome", "captured_at",
+}
+REQUIRED_EXHAUSTION_FIELDS = {
+    "reason_code", "summary", "next_evidence", "closest_candidate_urls",
+    "candidate_identifications_considered",
 }
 COMPARABILITY_WEIGHTS = {"exact": 1.0, "near": 0.75, "broad": 0.4}
+ALLOWED_STRATEGIES = {
+    "marking_exact", "visual_attributes", "image_search", "category_synonym",
+    "marketplace_sold", "regional_language", "candidate_confirmation",
+}
+ALLOWED_OUTCOMES = {
+    "candidate_found", "comp_found", "no_useful_result", "rejected_mismatch", "blocked",
+}
+ALLOWED_EXHAUSTION_REASONS = {
+    "no_candidates", "no_completed_sales", "conflicting_identity",
+    "inaccessible_sold_data", "insufficient_photo_detail",
+}
+ALLOWED_CHALLENGE_OUTCOMES = {"confirmed_exhaustion", "correction_found", "not_searchable"}
+GENERIC_NAME_WORDS = {
+    "a", "an", "and", "assorted", "black", "blue", "box", "brown", "ceramic",
+    "clear", "collection", "decorative", "glass", "green", "item", "lot", "metal",
+    "mixed", "orange", "pair", "plastic", "red", "round", "set", "silver", "small",
+    "the", "vintage", "white", "wood", "wooden", "yellow",
+}
 
 
 def valid_url(value: str) -> bool:
@@ -54,6 +72,29 @@ def number(value: Any, label: str) -> float:
     return result
 
 
+def integer(value: Any, label: str) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ResearchError(f"{label} must be an integer") from exc
+    if result < 0:
+        raise ResearchError(f"{label} must be non-negative")
+    return result
+
+
+def iso_timestamp(value: Any, label: str) -> str:
+    text = str(value).strip()
+    try:
+        datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ResearchError(f"{label} must be an ISO-8601 timestamp") from exc
+    return text
+
+
+def normalize_query(value: Any) -> str:
+    return " ".join(str(value).casefold().split())
+
+
 def validate_comp(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ResearchError(f"{item_id} comparable must be an object")
@@ -64,6 +105,8 @@ def validate_comp(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
     if not comp_id or comp_id in seen:
         raise ResearchError(f"{item_id} has blank or duplicate comp_id {comp_id!r}")
     seen.add(comp_id)
+    if not str(raw["title"]).strip():
+        raise ResearchError(f"{item_id}/{comp_id} has blank title")
     status = str(raw["transaction_status"]).strip().casefold()
     if status not in {"sold", "completed", "auction_result"}:
         raise ResearchError(f"{item_id}/{comp_id} is not verified completed-sale evidence")
@@ -80,19 +123,90 @@ def validate_comp(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
     currency = str(raw["currency"]).strip().upper()
     if len(currency) != 3 or not currency.isalpha():
         raise ResearchError(f"{item_id}/{comp_id} currency must be a three-letter code")
-    included = raw["included"]
-    if not isinstance(included, bool):
+    if not isinstance(raw["included"], bool):
         raise ResearchError(f"{item_id}/{comp_id} included must be boolean")
+    iso_timestamp(raw["captured_at"], f"{item_id}/{comp_id} captured_at")
     return {
-        **raw,
-        "comp_id": comp_id,
-        "source_url": source_url,
-        "transaction_status": status,
-        "currency": currency,
+        **raw, "comp_id": comp_id, "source_url": source_url,
+        "transaction_status": status, "currency": currency,
         "comparability": comparability,
         "sold_price": number(raw["sold_price"], f"{item_id}/{comp_id} sold_price"),
         "shipping": number(raw["shipping"], f"{item_id}/{comp_id} shipping"),
     }
+
+
+def validate_attempt(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ResearchError(f"{item_id} search attempt must be an object")
+    missing = sorted(REQUIRED_ATTEMPT_FIELDS - set(raw))
+    if missing:
+        raise ResearchError(f"{item_id} search attempt is missing: {', '.join(missing)}")
+    attempt_id = str(raw["attempt_id"]).strip()
+    if not attempt_id or attempt_id in seen:
+        raise ResearchError(f"{item_id} has blank or duplicate attempt_id {attempt_id!r}")
+    seen.add(attempt_id)
+    query = normalize_query(raw["query"])
+    if not query:
+        raise ResearchError(f"{item_id}/{attempt_id} has blank query")
+    strategy = str(raw["strategy"]).strip().casefold()
+    if strategy not in ALLOWED_STRATEGIES:
+        raise ResearchError(f"{item_id}/{attempt_id} has unsupported strategy {strategy!r}")
+    surface = str(raw["surface"]).strip()
+    if not surface:
+        raise ResearchError(f"{item_id}/{attempt_id} has blank surface")
+    search_url = str(raw["search_url"]).strip()
+    if not valid_url(search_url):
+        raise ResearchError(f"{item_id}/{attempt_id} has invalid search_url")
+    result_count = integer(raw["result_count"], f"{item_id}/{attempt_id} result_count")
+    result_urls = raw["result_urls"]
+    opened_urls = raw["opened_urls"]
+    if not isinstance(result_urls, list) or any(not valid_url(str(url)) for url in result_urls):
+        raise ResearchError(f"{item_id}/{attempt_id} result_urls must be a list of HTTP(S) URLs")
+    if not isinstance(opened_urls, list) or any(not valid_url(str(url)) for url in opened_urls):
+        raise ResearchError(f"{item_id}/{attempt_id} opened_urls must be a list of HTTP(S) URLs")
+    if result_count < len(result_urls):
+        raise ResearchError(f"{item_id}/{attempt_id} result_count is smaller than result_urls")
+    if not set(opened_urls).issubset(set(result_urls)):
+        raise ResearchError(f"{item_id}/{attempt_id} opened_urls must also appear in result_urls")
+    if result_count == 0 and (result_urls or opened_urls):
+        raise ResearchError(f"{item_id}/{attempt_id} zero results cannot include result URLs")
+    if result_count > 0 and not opened_urls:
+        raise ResearchError(f"{item_id}/{attempt_id} must open at least one returned result")
+    outcome = str(raw["outcome"]).strip().casefold()
+    if outcome not in ALLOWED_OUTCOMES:
+        raise ResearchError(f"{item_id}/{attempt_id} has unsupported outcome {outcome!r}")
+    if outcome in {"candidate_found", "comp_found"} and not opened_urls:
+        raise ResearchError(f"{item_id}/{attempt_id} {outcome} requires opened evidence")
+    return {
+        **raw, "attempt_id": attempt_id, "query": query, "strategy": strategy,
+        "surface": surface, "search_url": search_url, "result_urls": result_urls,
+        "opened_urls": opened_urls, "outcome": outcome, "result_count": result_count,
+        "captured_at": iso_timestamp(raw["captured_at"], f"{item_id}/{attempt_id} captured_at"),
+    }
+
+
+def validate_exhaustion(raw: Any, item_id: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ResearchError(f"{item_id} exhaustion must be an object")
+    missing = sorted(REQUIRED_EXHAUSTION_FIELDS - set(raw))
+    if missing:
+        raise ResearchError(f"{item_id} exhaustion is missing: {', '.join(missing)}")
+    reason = str(raw["reason_code"]).strip().casefold()
+    if reason not in ALLOWED_EXHAUSTION_REASONS:
+        raise ResearchError(f"{item_id} has unsupported exhaustion reason {reason!r}")
+    if not str(raw["summary"]).strip() or not str(raw["next_evidence"]).strip():
+        raise ResearchError(f"{item_id} exhaustion summary and next_evidence must be nonblank")
+    urls = raw["closest_candidate_urls"]
+    candidates = raw["candidate_identifications_considered"]
+    if not isinstance(urls, list) or any(not valid_url(str(url)) for url in urls):
+        raise ResearchError(f"{item_id} closest_candidate_urls must be a list of HTTP(S) URLs")
+    if not isinstance(candidates, list) or any(not str(candidate).strip() for candidate in candidates):
+        raise ResearchError(f"{item_id} candidate_identifications_considered must be a list of nonblank strings")
+    return {**raw, "reason_code": reason}
+
+
+def discriminating_tokens(name: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+", name.casefold()) if len(token) >= 3 and token not in GENERIC_NAME_WORDS}
 
 
 def read_ledger(path: Path, intake_id: str) -> dict[str, dict[str, str]]:
@@ -106,17 +220,69 @@ def read_ledger(path: Path, intake_id: str) -> dict[str, dict[str, str]]:
     return by_id
 
 
+def add_blocker(entries: list[dict[str, str]], item_id: str, code: str, message: str) -> None:
+    entries.append({"item_id": item_id, "code": code, "message": message})
+
+
+def validate_challenge(raw: Any, ledger_ids: set[str]) -> int:
+    if not isinstance(raw, dict):
+        raise ResearchError("challenge_review must be an object")
+    required = {"review_run_id", "created_at", "reviewer", "independent_context", "sampled_item_ids", "findings", "corrections_integrated"}
+    missing = sorted(required - set(raw))
+    if missing:
+        raise ResearchError(f"challenge_review is missing: {', '.join(missing)}")
+    if not str(raw["review_run_id"]).strip() or not str(raw["reviewer"]).strip():
+        raise ResearchError("challenge_review run ID and reviewer must be nonblank")
+    iso_timestamp(raw["created_at"], "challenge_review created_at")
+    if raw["independent_context"] is not True:
+        raise ResearchError("challenge_review must declare independent_context=true")
+    if raw["corrections_integrated"] is not True:
+        raise ResearchError("challenge_review corrections must be integrated before authorization")
+    sampled = raw["sampled_item_ids"]
+    findings = raw["findings"]
+    if not isinstance(sampled, list) or len(sampled) != len(set(sampled)):
+        raise ResearchError("challenge_review sampled_item_ids must be a unique list")
+    if not set(sampled).issubset(ledger_ids):
+        raise ResearchError("challenge_review contains an unknown sampled item ID")
+    if not isinstance(findings, list):
+        raise ResearchError("challenge_review findings must be a list")
+    finding_ids: set[str] = set()
+    for finding in findings:
+        if not isinstance(finding, dict):
+            raise ResearchError("challenge_review finding must be an object")
+        item_id = str(finding.get("item_id", "")).strip()
+        outcome = str(finding.get("outcome", "")).strip().casefold()
+        summary = str(finding.get("summary", "")).strip()
+        urls = finding.get("opened_urls")
+        if not item_id or item_id in finding_ids or outcome not in ALLOWED_CHALLENGE_OUTCOMES or not summary:
+            raise ResearchError("challenge_review finding has blank, duplicate, or invalid fields")
+        if not isinstance(urls, list) or any(not valid_url(str(url)) for url in urls):
+            raise ResearchError(f"challenge_review/{item_id} opened_urls must contain valid HTTP(S) URLs")
+        if outcome != "not_searchable" and not urls:
+            raise ResearchError(f"challenge_review/{item_id} requires opened evidence")
+        finding_ids.add(item_id)
+    if finding_ids != set(sampled):
+        raise ResearchError("challenge_review findings must exactly match sampled_item_ids")
+    return len(sampled)
+
+
 def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, Any]:
     payload = json.loads(research_path.read_text(encoding="utf-8-sig"))
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise ResearchError("Research file must contain an items array")
+    if payload.get("version") != 2:
+        raise ResearchError("Current research must use research audit schema version 2")
     if payload.get("intake_id") != intake_id:
         raise ResearchError("Research intake_id does not match requested intake")
     ledger = read_ledger(ledger_path, intake_id)
     seen_items: set[str] = set()
+    seen_comps: set[str] = set()
+    seen_attempts: set[str] = set()
     findings: list[dict[str, Any]] = []
     blockers: list[dict[str, str]] = []
-    seen_comps: set[str] = set()
+    included_url_items: dict[str, set[str]] = defaultdict(set)
+    zero_comp_item_ids: set[str] = set()
+
     for raw_item in payload["items"]:
         if not isinstance(raw_item, dict):
             raise ResearchError("Research item must be an object")
@@ -124,54 +290,95 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
         if not item_id or item_id in seen_items or item_id not in ledger:
             raise ResearchError(f"Research has blank, duplicate, or unknown item_id {item_id!r}")
         seen_items.add(item_id)
-        comps = [validate_comp(comp, item_id, seen_comps) for comp in raw_item.get("comparables", [])]
+        attempts = [validate_attempt(value, item_id, seen_attempts) for value in raw_item.get("search_attempts", [])]
+        comps = [validate_comp(value, item_id, seen_comps) for value in raw_item.get("comparables", [])]
         usable = [comp for comp in comps if comp["included"]]
         totals = [comp["sold_price"] + comp["shipping"] for comp in usable]
+        for comp in usable:
+            included_url_items[comp["source_url"]].add(item_id)
+
+        queries = {attempt["query"] for attempt in attempts}
+        strategies = {attempt["strategy"] for attempt in attempts}
+        surfaces = {attempt["surface"].casefold() for attempt in attempts}
+        if len(queries) < 2 or len(strategies) < 2:
+            add_blocker(blockers, item_id, "INSUFFICIENT_SEARCH_COVERAGE", "Every item requires at least two distinct item-specific queries using at least two strategies.")
+        if sum(attempt["result_count"] for attempt in attempts) == 0:
+            add_blocker(blockers, item_id, "NO_SEARCH_RESULTS", "All recorded searches returned zero results; research cannot be authorized without opened web evidence or a documented access failure.")
+        name_tokens = discriminating_tokens(ledger[item_id].get("identified_name", ""))
+        if name_tokens and not any(name_tokens & set(query.split()) for query in queries):
+            add_blocker(blockers, item_id, "NON_SPECIFIC_SEARCH", "No recorded query contains a discriminating token from the identified item name.")
+
         row = ledger[item_id]
         reported_count = int(float(row.get("comp_count") or 0))
         ledger_urls = {url.strip() for url in (row.get("comp_urls") or "").split(";") if url.strip()}
         usable_urls = {comp["source_url"] for comp in usable}
         if reported_count != len(usable) or ledger_urls != usable_urls:
-            blockers.append({"item_id": item_id, "code": "COMP_RECONCILIATION", "message": "Ledger comp_count/comp_urls do not exactly match included structured comparables."})
+            add_blocker(blockers, item_id, "COMP_RECONCILIATION", "Ledger comp_count/comp_urls do not exactly match included structured comparables.")
+
         basis = row.get("valuation_basis", "")
-        confidence = row.get("valuation_confidence", "")
-        decision = row.get("decision", "")
-        basis_value = float(row.get("decision_basis_value") or 0)
-        threshold_distance = min(abs(basis_value - 40), abs(basis_value - 50))
-        unsupported = basis == "insufficient_evidence" or confidence == "low" or not usable
-        if decision != "REVIEW" and unsupported and (decision in {"DONATE", "CONFIRM DONATION"} or threshold_distance <= 15):
-            blockers.append({"item_id": item_id, "code": "UNSUPPORTED_DISPOSITION", "message": "Insufficient or low-confidence evidence cannot authorize a disposal-sensitive disposition; use REVIEW until supported."})
+        confidence = row.get("valuation_confidence", "").casefold()
+        decision = row.get("decision", "").upper()
+        exact_or_near = any(comp["comparability"] in {"exact", "near"} for comp in usable)
+        unsupported = basis == "insufficient_evidence" or confidence not in {"medium", "high"} or not usable
+        if decision != "REVIEW" and unsupported:
+            add_blocker(blockers, item_id, "UNSUPPORTED_DISPOSITION", "A non-REVIEW decision requires usable evidence, a supported basis, and medium or high confidence.")
+        if decision != "REVIEW" and usable and not exact_or_near:
+            add_blocker(blockers, item_id, "BROAD_ONLY_DISPOSITION", "Broad category comparables alone cannot authorize a non-REVIEW decision.")
+
+        exhausted = False
+        if not usable:
+            zero_comp_item_ids.add(item_id)
+            if decision != "REVIEW":
+                add_blocker(blockers, item_id, "ZERO_COMP_DISPOSITION", "An item with no usable completed-sale comparable must remain REVIEW.")
+            if len(queries) < 4 or "image_search" not in strategies or "marketplace_sold" not in strategies or len(surfaces) < 2:
+                add_blocker(blockers, item_id, "SEARCH_NOT_EXHAUSTED", "Zero-comp REVIEW requires four distinct queries, image search, marketplace sold search, and at least two surfaces.")
+            try:
+                validate_exhaustion(raw_item.get("exhaustion"), item_id)
+                exhausted = True
+            except ResearchError as exc:
+                add_blocker(blockers, item_id, "MISSING_EXHAUSTION_RECORD", str(exc))
+
         findings.append({
-            "item_id": item_id,
+            "item_id": item_id, "search_attempt_count": len(attempts),
+            "search_query_count": len(queries), "search_strategy_count": len(strategies),
+            "search_surface_count": len(surfaces), "search_exhausted": exhausted,
             "included_comparable_count": len(usable),
             "excluded_comparable_count": len(comps) - len(usable),
             "normalized_total_low": min(totals) if totals else None,
             "normalized_total_median": statistics.median(totals) if totals else None,
             "normalized_total_high": max(totals) if totals else None,
         })
-    missing_items = sorted(set(ledger) - seen_items)
-    for item_id in missing_items:
-        blockers.append({"item_id": item_id, "code": "MISSING_RESEARCH_ITEM", "message": "No structured research record exists for this ledger item."})
+
+    for item_id in sorted(set(ledger) - seen_items):
+        add_blocker(blockers, item_id, "MISSING_RESEARCH_ITEM", "No structured research record exists for this ledger item.")
+    for url, item_ids in sorted(included_url_items.items()):
+        if len(item_ids) > 3:
+            for item_id in sorted(item_ids):
+                add_blocker(blockers, item_id, "OVERUSED_COMPARABLE", f"Comparable URL is reused across {len(item_ids)} items: {url}")
+
+    challenge_sample_count = 0
+    if len(zero_comp_item_ids) >= 10:
+        if not isinstance(payload.get("challenge_review"), dict):
+            add_blocker(blockers, "*", "MISSING_CHALLENGE_REVIEW", "Ten or more zero-comp items require an independent challenge review of at least ten high-searchability items.")
+        else:
+            challenge_sample_count = validate_challenge(payload["challenge_review"], set(ledger))
+            if challenge_sample_count < 10:
+                add_blocker(blockers, "*", "INSUFFICIENT_CHALLENGE_SAMPLE", "Independent challenge review must sample at least ten items when ten or more items have zero comps.")
+
     return {
-        "version": 1,
-        "verification_mode": "current-research",
-        "catalog_authorized": not blockers,
-        "listing_authorized": False,
-        "client_id": payload.get("client_id", ""),
-        "intake_id": intake_id,
+        "version": 2, "verification_mode": "current-research",
+        "catalog_authorized": not blockers, "listing_authorized": False,
+        "client_id": payload.get("client_id", ""), "intake_id": intake_id,
         "status": "PASS" if not blockers else "FAIL",
-        "research_sha256": sha256_file(research_path),
-        "ledger_sha256": sha256_file(ledger_path),
-        "item_count": len(ledger),
-        "finding_count": len(findings),
-        "blocker_count": len(blockers),
-        "findings": findings,
-        "blockers": blockers,
+        "research_sha256": sha256_file(research_path), "ledger_sha256": sha256_file(ledger_path),
+        "item_count": len(ledger), "finding_count": len(findings),
+        "blocker_count": len(blockers), "challenge_sample_count": challenge_sample_count,
+        "findings": findings, "blockers": blockers,
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate structured completed-sale evidence against a BFG ledger.")
+    parser = argparse.ArgumentParser(description="Validate item-specific search and completed-sale evidence against a BFG ledger.")
     parser.add_argument("--research", required=True, type=Path)
     parser.add_argument("--ledger", required=True, type=Path)
     parser.add_argument("--intake-id", required=True)
@@ -181,8 +388,8 @@ def main() -> int:
         result = gate(args.research, args.ledger, args.intake_id)
         atomic_write_json(args.output, result)
         print(json.dumps({key: result[key] for key in ("status", "item_count", "finding_count", "blocker_count")}, indent=2))
-        for blocker in result["blockers"][:20]:
-            print(f"error: {blocker['item_id']} {blocker['code']}: {blocker['message']}", file=sys.stderr)
+        for entry in result["blockers"][:20]:
+            print(f"error: {entry['item_id']} {entry['code']}: {entry['message']}", file=sys.stderr)
         if len(result["blockers"]) > 20:
             print(f"error: {len(result['blockers']) - 20} additional blockers are recorded in {args.output}", file=sys.stderr)
         return 0 if result["status"] == "PASS" else 2

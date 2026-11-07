@@ -21,8 +21,12 @@ class CatalogPayloadTests(unittest.TestCase):
             self.assertEqual(upsert.returncode, 0, upsert.stderr)
             self.assertIn('"operation": "CREATE"', revisions.read_text(encoding="utf-8"))
             research = root / "research.json"
-            comp = {"comp_id": "c1", "marketplace": "eBay", "source_url": "https://example.com/sold", "transaction_status": "sold", "sale_date": "2026-07-01", "sold_price": 70, "shipping": 5, "currency": "USD", "condition": "used", "comparability": "exact", "included": True, "include_reason": "same model", "captured_at": "2026-08-02T12:00:00-04:00"}
-            research.write_text(json.dumps({"client_id": "client-a", "intake_id": "intake-a", "items": [{"item_id": "item-a", "comparables": [comp]}]}), encoding="utf-8")
+            comp = {"comp_id": "c1", "title": "Verified item same model", "marketplace": "eBay", "source_url": "https://example.com/sold", "transaction_status": "sold", "sale_date": "2026-07-01", "sold_price": 70, "shipping": 5, "currency": "USD", "condition": "used", "comparability": "exact", "included": True, "include_reason": "same model", "captured_at": "2026-08-02T12:00:00-04:00"}
+            attempts = [
+                {"attempt_id": "a1", "query": "verified item maker", "strategy": "marking_exact", "surface": "Google", "search_url": "https://www.google.com/search?q=verified+item+maker", "result_count": 5, "result_urls": ["https://example.com/reference"], "opened_urls": ["https://example.com/reference"], "outcome": "candidate_found", "captured_at": "2026-08-02T11:55:00-04:00"},
+                {"attempt_id": "a2", "query": "verified item sold", "strategy": "marketplace_sold", "surface": "eBay sold", "search_url": "https://www.ebay.com/sch/i.html?_nkw=verified+item&LH_Sold=1", "result_count": 3, "result_urls": ["https://example.com/sold"], "opened_urls": ["https://example.com/sold"], "outcome": "comp_found", "captured_at": "2026-08-02T12:00:00-04:00"},
+            ]
+            research.write_text(json.dumps({"version": 2, "client_id": "client-a", "intake_id": "intake-a", "items": [{"item_id": "item-a", "search_attempts": attempts, "comparables": [comp]}]}), encoding="utf-8")
             verification = root / "research-verification.json"
             gate = subprocess.run([sys.executable, str(SCRIPTS / "research_gate.py"), "--research", str(research), "--ledger", str(ledger), "--intake-id", "intake-a", "--output", str(verification)], text=True, capture_output=True)
             self.assertEqual(gate.returncode, 0, gate.stderr)

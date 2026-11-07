@@ -174,6 +174,8 @@ Inspect the full image and then zoom into:
 - condition, damage, repairs, alterations, and safety concerns
 - variant indicators such as edition, colorway, production location, or packaging
 
+Create a visual search fingerprint from every usable view before assigning an identity: object type, likely material, silhouette, construction, color, decoration, markings, and distinctive handle, hinge, lid, spout, foot, fastener, or connector geometry. Resolve contradictions between the proposed identity and visible construction. Do not carry a material guess such as ceramic, sterling, or solid wood into search merely because it appeared in an earlier boundary label.
+
 State identification at the narrowest defensible level. Never call a make or model exact from visual similarity alone.
 
 Use these confidence levels:
@@ -189,9 +191,15 @@ Record `identification_basis`, `visible_markings`, and `missing_evidence`. Reque
 
 Research sold or completed transactions, not active asking prices. Follow [references/research-and-valuation.md](references/research-and-valuation.md).
 
-Search using the most discriminating confirmed attributes first. Prefer three to eight recent, comparable sales when available. Capture source URL, marketplace, sale date, sold price, shipping, condition, and comparability notes for every comp.
+Search using the most discriminating confirmed attributes first. Use general web and image search to identify unmarked or visually distinctive goods, then search marketplace sold filters and auction archives for valuation. Prefer three to eight recent, comparable sales when available. Capture source URL, marketplace, sale date, sold price, shipping, condition, and comparability notes for every comp.
 
-Store that evidence in the structured format defined by [references/research-audit-schema.md](references/research-audit-schema.md), then run `scripts/research_gate.py`. The count and URLs of included comparables must exactly reconcile to the ledger. Do not allow an unsupported or low-confidence valuation to authorize donation, confirmation-band disposition, or another threshold-sensitive decision; use `REVIEW` until the evidence is defensible.
+For every item, record at least two distinct item-specific queries using at least two strategies, plus the reproducible search URL, returned URLs, and URLs actually opened. Query text alone is not research evidence. A nonzero result count requires opened evidence, and an item whose searches all claim zero results blocks the batch for search-access or query correction. When no usable comp is found, do not assign `REVIEW` until at least four query formulations have been attempted across two surfaces, including image search and a completed-sale search. Record the closest candidates, rejection reasons, and next evidence required. `REVIEW` is not permission to skip research.
+
+Do not use a fixed category-comp library or generic keyword routing as a substitute for item-level search. Do not let a keyword such as `cameo`, `amber`, `turquoise`, `military`, or `Japanese` automatically force `REVIEW`; research the photographed object and reserve `REVIEW` for the unresolved uncertainty itself. If search results reveal that the initial object type or material was wrong, revise the identification before valuing it.
+
+When ten or more items still have zero comps, run an independent challenge review over at least ten of the most searchable items before authorizing the batch. Prefer visible brands, titles, ISBNs, UPCs, model numbers, named makers, and distinctive forms. The challenge must open evidence and must not assume the first pass is correct. Integrate every missed identity or completed sale, then continue challenging the remaining high-searchability zero-comp items until corrections are exhausted. Store the challenge run, findings, opened URLs, and integration status in the schema-version-2 audit.
+
+Store schema-version-2 evidence in the structured format defined by [references/research-audit-schema.md](references/research-audit-schema.md), then run `scripts/research_gate.py`. The gate must verify search coverage, prevent overused comparable URLs, and reconcile the count and URLs of included comparables to the ledger. Do not allow an unsupported or low-confidence valuation to authorize any non-`REVIEW` disposition; use `REVIEW` only after the required search is exhausted.
 
 Exclude or down-weight:
 

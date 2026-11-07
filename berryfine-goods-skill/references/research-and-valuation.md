@@ -23,6 +23,23 @@ Start with confirmed maker, model, pattern, model number, material, size, editio
 
 For an unidentified object, search visible markings and distinctive construction first. Use image similarity as a lead, not proof.
 
+Treat identification and valuation as two linked but separate searches. First determine the best item vocabulary and candidate identity; then search completed sales for that candidate. Do not skip identification because a generic category comp is available.
+
+Build a visual search fingerprint from all photographs before searching: object type, likely material, construction, silhouette, color, handle/hinge/lid/spout/hardware geometry, decoration, markings, and apparent era. If the first results disagree with the initial category or material, correct the identification and search again. For example, visible screws, a rolled metal rim, and a black metal interior outweigh a superficial "ceramic teapot" impression.
+
+Use this query ladder:
+
+1. exact visible maker/model/marking in quotes
+2. distinctive visual fingerprint without an assumed maker
+3. image search using the clearest full-object image and, when useful, a crop of the mark or distinctive hardware
+4. candidate maker/model plus a feature that can falsify the match
+5. candidate identity plus `sold`, `completed`, or an auction-results surface
+6. synonyms, regional terms, translated markings, and alternate spellings when the first language or category vocabulary fails
+
+Google or another general web/image search is appropriate for identification leads. Marketplace sold filters and auction archives are required for valuation evidence. Record the actual query, reproducible search URL, search surface, returned URLs, URLs actually opened, result count, outcome, and time in the research audit. Query text without opened evidence does not prove that a search occurred.
+
+Do not use a fixed category-comparable library as a substitute for item-level research. One completed-sale URL may support at most three genuinely similar items, and each item still needs its own search log and comparability analysis.
+
 ## Comp capture
 
 For each candidate comp, capture:
@@ -85,6 +102,10 @@ Document:
 If a provisional range is still useful, label it as low confidence.
 Set `valuation_basis` to `insufficient_evidence` when no defensible source
 class applies.
+
+`REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete at least four distinct query formulations across at least two surfaces, including image search and a completed-sale search. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion.
+
+For a batch with ten or more zero-comp items, run an independent challenge over at least ten high-searchability items before accepting the first-pass conclusions. Prioritize visible identifiers, named titles, brands, models, and distinctive forms. If the challenge finds a missed identity or valid completed sale, integrate it and continue challenging the remaining high-searchability zero-comp items until the corrections are exhausted. Preserve the challenge report and opened evidence in the structured audit.
 
 ## Items planned for testing
 

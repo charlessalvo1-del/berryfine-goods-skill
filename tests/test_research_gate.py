@@ -19,10 +19,14 @@ class ResearchGateTests(unittest.TestCase):
             writer = csv.DictWriter(handle, fieldnames=list(row)); writer.writeheader(); writer.writerow(row)
 
     def research(self, comps: list[dict]) -> dict:
-        return {"version": 1, "client_id": "c", "intake_id": "intake-a", "items": [{"item_id": "item-a", "comparables": comps}]}
+        attempts = [
+            {"attempt_id": "a1", "query": "verified item maker", "strategy": "marking_exact", "surface": "Google", "search_url": "https://www.google.com/search?q=verified+item+maker", "result_count": 5, "result_urls": ["https://example.com/reference"], "opened_urls": ["https://example.com/reference"], "outcome": "candidate_found", "captured_at": "2026-08-02T11:55:00-04:00"},
+            {"attempt_id": "a2", "query": "verified item sold", "strategy": "marketplace_sold", "surface": "eBay sold", "search_url": "https://www.ebay.com/sch/i.html?_nkw=verified+item&LH_Sold=1", "result_count": 3, "result_urls": ["https://example.com/sold"], "opened_urls": ["https://example.com/sold"], "outcome": "comp_found", "captured_at": "2026-08-02T12:00:00-04:00"},
+        ]
+        return {"version": 2, "client_id": "c", "intake_id": "intake-a", "items": [{"item_id": "item-a", "search_attempts": attempts, "comparables": comps}]}
 
     def comp(self) -> dict:
-        return {"comp_id": "c1", "marketplace": "eBay", "source_url": "https://example.com/sold", "transaction_status": "sold", "sale_date": "2026-07-01", "sold_price": 70, "shipping": 5, "currency": "USD", "condition": "used", "comparability": "exact", "included": True, "include_reason": "same model", "captured_at": "2026-08-02T12:00:00-04:00"}
+        return {"comp_id": "c1", "title": "Verified item same model", "marketplace": "eBay", "source_url": "https://example.com/sold", "transaction_status": "sold", "sale_date": "2026-07-01", "sold_price": 70, "shipping": 5, "currency": "USD", "condition": "used", "comparability": "exact", "included": True, "include_reason": "same model", "captured_at": "2026-08-02T12:00:00-04:00"}
 
     def test_passes_reconciled_structured_comparable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
