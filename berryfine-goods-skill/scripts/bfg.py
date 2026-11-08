@@ -9,6 +9,7 @@ import json
 import platform
 import shutil
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ REQUIRED_RECORDS = {
     "builder_verification": "catalog-builder-verification.json",
     "catalog_verification": "catalog-verification.json",
 }
+ALLOWED_DECISIONS = ("SELL", "DONATE", "CONFIRM DONATION", "REVIEW")
+REQUIRED_RESEARCH_POLICY_VERSION = "2.5.0"
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -48,6 +51,38 @@ def doctor() -> dict[str, Any]:
     return checks
 
 
+def summarize_dispositions(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Create the mandatory, reconciled end-of-run state summary."""
+    decisions = Counter(str(row.get("decision", "")).strip().upper() for row in rows)
+    item_ids = [str(row.get("item_id", "")).strip() for row in rows]
+    total = len(rows)
+    allowed_total = sum(decisions[action] for action in ALLOWED_DECISIONS)
+    pending = sum(
+        str(row.get("human_review_status", "")).strip().upper() == "PENDING"
+        for row in rows
+    )
+    return {
+        "total_items": total,
+        "sell": decisions["SELL"],
+        "donate": decisions["DONATE"],
+        "confirm_donation": decisions["CONFIRM DONATION"],
+        "review": decisions["REVIEW"],
+        "needs_owner_attention": decisions["CONFIRM DONATION"] + decisions["REVIEW"],
+        "human_review_pending": pending,
+        "invalid_decision_count": total - allowed_total,
+        "duplicate_item_id_count": len(item_ids) - len(set(item_ids)),
+        "reconciled": allowed_total == total and len(item_ids) == len(set(item_ids)),
+    }
+
+
+def resolve_ledger_path(records: Path, explicit: Path | None) -> Path:
+    if explicit is not None:
+        return explicit.resolve()
+    iteration_copy = records / "client-inventory.csv"
+    canonical = records.parent / "client-inventory.csv"
+    return iteration_copy if iteration_copy.is_file() else canonical
+
+
 def audit(args: argparse.Namespace) -> dict[str, Any]:
     client_folder = args.client_folder.resolve()
     records = args.records.resolve()
@@ -63,6 +98,28 @@ def audit(args: argparse.Namespace) -> dict[str, Any]:
         artifacts[label] = str(path)
         if not path.is_file():
             blockers.append({"code": "MISSING_RECORD", "artifact": label, "message": f"Missing {name}"})
+    ledger_path = resolve_ledger_path(records, args.ledger)
+    artifacts["ledger"] = str(ledger_path)
+    disposition_summary = summarize_dispositions([])
+    if not ledger_path.is_file():
+        blockers.append({"code": "MISSING_LEDGER", "artifact": "ledger", "message": f"Missing client inventory ledger: {ledger_path}"})
+    else:
+        with ledger_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            required_headers = {"intake_id", "item_id", "decision", "human_review_status"}
+            missing_headers = required_headers - set(reader.fieldnames or [])
+            if missing_headers:
+                blockers.append({"code": "LEDGER_HEADERS_MISSING", "artifact": "ledger", "message": "Ledger is missing headers: " + ", ".join(sorted(missing_headers))})
+                current_rows: list[dict[str, str]] = []
+            else:
+                current_rows = [row for row in reader if row.get("intake_id") == args.intake_id]
+            disposition_summary = summarize_dispositions(current_rows)
+            if not current_rows:
+                blockers.append({"code": "LEDGER_INTAKE_MISSING", "artifact": "ledger", "message": f"Ledger has no rows for intake_id={args.intake_id!r}."})
+            if disposition_summary["invalid_decision_count"]:
+                blockers.append({"code": "INVALID_DISPOSITION_SUMMARY", "artifact": "ledger", "message": f"{disposition_summary['invalid_decision_count']} current-intake row(s) have an invalid disposition."})
+            if disposition_summary["duplicate_item_id_count"]:
+                blockers.append({"code": "DUPLICATE_LEDGER_ITEM", "artifact": "ledger", "message": f"{disposition_summary['duplicate_item_id_count']} duplicate current-intake item ID row(s) prevent a reconciled summary."})
     client_name = args.client_name
     catalog = client_folder / f"{client_name} New Catalog.xlsx"
     exceptions = client_folder / f"{client_name} Exceptions.xlsx"
@@ -90,11 +147,16 @@ def audit(args: argparse.Namespace) -> dict[str, Any]:
         path = records / REQUIRED_RECORDS[label]
         if path.is_file() and read_json(path).get("status") != "PASS":
             blockers.append({"code": "GATE_NOT_PASS", "artifact": label, "message": f"{path.name} does not contain PASS."})
+    research_verification_path = records / REQUIRED_RECORDS["research_verification"]
+    if research_verification_path.is_file():
+        research_verification = read_json(research_verification_path)
+        if research_verification.get("research_policy_version") != REQUIRED_RESEARCH_POLICY_VERSION:
+            blockers.append({"code": "STALE_RESEARCH_POLICY", "artifact": "research_verification", "message": f"Research verification must pass policy version {REQUIRED_RESEARCH_POLICY_VERSION}."})
     categorized = args.categorized.resolve()
     artifacts["categorized"] = str(categorized)
     if categorized.parent != client_folder or not categorized.is_dir() or not categorized.name.startswith("Categorized Inventory "):
         blockers.append({"code": "CATEGORIZED_FOLDER_INVALID", "artifact": "categorized", "message": "The exact dated categorized folder must exist directly in the main client folder."})
-    return {"version": 1, "status": "PASS" if not blockers else "FAIL", "client_name": client_name, "intake_id": args.intake_id, "client_folder": str(client_folder), "records": str(records), "blocker_count": len(blockers), "blockers": blockers, "artifacts": artifacts}
+    return {"version": 1, "status": "PASS" if not blockers else "FAIL", "client_name": client_name, "intake_id": args.intake_id, "client_folder": str(client_folder), "records": str(records), "disposition_summary": disposition_summary, "blocker_count": len(blockers), "blockers": blockers, "artifacts": artifacts}
 
 
 def legacy_audit(args: argparse.Namespace) -> dict[str, Any]:
@@ -126,7 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor")
     audit_parser = commands.add_parser("audit")
-    audit_parser.add_argument("--client-folder", required=True, type=Path); audit_parser.add_argument("--records", required=True, type=Path); audit_parser.add_argument("--categorized", required=True, type=Path); audit_parser.add_argument("--client-name", required=True); audit_parser.add_argument("--intake-id", required=True); audit_parser.add_argument("--output", type=Path)
+    audit_parser.add_argument("--client-folder", required=True, type=Path); audit_parser.add_argument("--records", required=True, type=Path); audit_parser.add_argument("--categorized", required=True, type=Path); audit_parser.add_argument("--client-name", required=True); audit_parser.add_argument("--intake-id", required=True); audit_parser.add_argument("--ledger", type=Path); audit_parser.add_argument("--output", type=Path)
     legacy = commands.add_parser("legacy-audit")
     legacy.add_argument("--manifest", required=True, type=Path); legacy.add_argument("--preflight", required=True, type=Path); legacy.add_argument("--ledger", required=True, type=Path); legacy.add_argument("--intake-id", required=True); legacy.add_argument("--catalog", required=True, type=Path); legacy.add_argument("--exceptions", required=True, type=Path); legacy.add_argument("--output", type=Path)
     return parser

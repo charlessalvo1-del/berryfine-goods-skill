@@ -27,7 +27,7 @@ Treat identification and valuation as two linked but separate searches. First de
 
 Build a visual search fingerprint from all photographs before searching: object type, likely material, construction, silhouette, color, handle/hinge/lid/spout/hardware geometry, decoration, markings, and apparent era. If the first results disagree with the initial category or material, correct the identification and search again. For example, visible screws, a rolled metal rim, and a black metal interior outweigh a superficial "ceramic teapot" impression.
 
-Use this query ladder:
+Use this query ladder. Every item must record at least four distinct queries across at least three strategies and open at least four unique direct pages:
 
 1. exact visible maker/model/marking in quotes
 2. distinctive visual fingerprint without an assumed maker
@@ -75,16 +75,18 @@ Use older sales for rare items when necessary and say why.
 
 Remove false matches first. Explain meaningful outliers instead of mechanically averaging them.
 
-When enough comps exist:
+Require three unique, directly opened completed transactions before any non-`REVIEW` disposition. Require five when the supported range touches $30 through $65. When enough comps exist:
 
 - use the lower comparable cluster for `market_value_low`
-- use the central tendency of the best matches for `market_value_mid`
+- use the median normalized total of the best matches for `market_value_mid`; do not use a simple mean with only three comps
 - use the upper defensible cluster for `market_value_high`
 - set `ebay_price` near the upper-middle of the supported range when normal negotiation is expected
 - set `local_price` for local demand, pickup convenience, and avoided shipping/fees
 - set `quick_sale_price` below the central estimate, normally near the low end
 
 Adjust for condition, completeness, testing, authenticity confidence, seasonality, shipping difficulty, and lot size. State material adjustments.
+
+Record a `price_synthesis` object containing `method=median`, every included comp ID, the raw median, the adjusted midpoint, and the adjustment reason. The adjusted midpoint must match both the ledger midpoint and decision-basis value. If a non-USD sale is included, normalize it to USD with a dated exchange-rate note before synthesis.
 
 Do not apply a universal percentage formula when the evidence suggests marketplace-specific demand.
 
@@ -103,7 +105,11 @@ If a provisional range is still useful, label it as low confidence.
 Set `valuation_basis` to `insufficient_evidence` when no defensible source
 class applies.
 
-`REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete at least four distinct query formulations across at least two surfaces, including image search and a completed-sale search. Open at least three unique direct result pages, including a result reached through image search and a direct completed-sale or auction candidate. Search pages, category indexes, and storefront pages do not count. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion, and the same exhaustion text may not be copied across unrelated items.
+`REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete at least four distinct query formulations across at least two surfaces, including image search and a completed-sale search. Open at least four unique direct result pages, including a result reached through image search and a direct completed-sale or auction candidate. Search pages, category indexes, pricing pages, and storefront pages do not count. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion, and the same exhaustion text may not be copied across unrelated items.
+
+Apply disposition thresholds to uncertainty ranges. `DONATE` requires a high bound below $40; `CONFIRM DONATION` requires the entire range to remain within $40-$49.99; `SELL` requires a low bound of at least $50. A range crossing either threshold remains `REVIEW` even when its midpoint falls cleanly into one band.
+
+Do not claim a 90%-97.8% identification or pricing accuracy rate from process compliance alone. Validate identification against independently confirmed labels or experts, validate pricing against realized outcomes, and report price-range coverage plus median absolute percentage error on a held-out sample.
 
 For a batch with ten or more zero-comp items, record the entire first-pass zero-comp population and independently challenge every item before accepting the conclusions. Prioritize visible identifiers, named titles, brands, models, and distinctive forms, then continue through the remaining population. Integrate every missed identity or valid completed sale. Preserve the full challenge population, report, direct opened evidence, correction count, and explicit expansion status in the structured audit.
 

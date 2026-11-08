@@ -13,6 +13,9 @@ from bfg_integrity import atomic_write_json, sha256_file, sha256_json
 from inventory_ledger import InventoryError, read_ledger, validate_row
 
 
+REQUIRED_RESEARCH_POLICY_VERSION = "2.5.0"
+
+
 class CatalogPayloadError(ValueError):
     """Raised when catalog source records are incomplete or stale."""
 
@@ -95,6 +98,13 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     verification_mode = verification.get("verification_mode", "current-research")
     if verification_mode not in {"current-research", "legacy-catalog-refresh"}:
         raise CatalogPayloadError("Unsupported research verification mode")
+    if (
+        verification_mode == "current-research"
+        and verification.get("research_policy_version") != REQUIRED_RESEARCH_POLICY_VERSION
+    ):
+        raise CatalogPayloadError(
+            f"Current research must pass policy version {REQUIRED_RESEARCH_POLICY_VERSION}"
+        )
     if verification.get("catalog_authorized") is False:
         raise CatalogPayloadError("Research verification does not authorize catalog creation")
     if verification_mode == "legacy-catalog-refresh":

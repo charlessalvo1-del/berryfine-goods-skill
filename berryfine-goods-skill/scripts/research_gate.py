@@ -64,6 +64,12 @@ SEARCH_HOSTS = {
     "bing.com", "www.bing.com", "google.com", "www.google.com",
     "images.google.com", "search.yahoo.com",
 }
+MIN_SEARCH_QUERIES = 4
+MIN_SEARCH_STRATEGIES = 3
+MIN_DIRECT_OPENED_PAGES = 4
+MIN_COMPLETED_COMPS = 3
+BORDERLINE_COMPLETED_COMPS = 5
+RESEARCH_POLICY_VERSION = "2.5.0"
 
 
 def valid_url(value: str) -> bool:
@@ -78,13 +84,13 @@ def direct_evidence_url(value: str) -> bool:
     path = parsed.path.casefold().rstrip("/")
     if host in SEARCH_HOSTS:
         return False
-    if host.endswith("ebay.com") or host.endswith("ebay.co.uk"):
+    if host in {"ebay.com", "ebay.co.uk"} or host.endswith((".ebay.com", ".ebay.co.uk")):
         return path.startswith("/itm/")
-    if host.endswith("mercari.com"):
+    if host == "mercari.com" or host.endswith(".mercari.com"):
         return path.startswith("/us/item/")
-    if host.endswith("etsy.com"):
+    if host == "etsy.com" or host.endswith(".etsy.com"):
         return path.startswith("/listing/")
-    if any(marker in path for marker in ("/search", "/category/", "/categories/")):
+    if any(marker in path for marker in ("/search", "/category/", "/categories/", "/pricing/", "/collections/", "/browse/")):
         return False
     return bool(path)
 
@@ -153,12 +159,19 @@ def validate_comp(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
     if not isinstance(raw["included"], bool):
         raise ResearchError(f"{item_id}/{comp_id} included must be boolean")
     iso_timestamp(raw["captured_at"], f"{item_id}/{comp_id} captured_at")
+    sold_price = number(raw["sold_price"], f"{item_id}/{comp_id} sold_price")
+    shipping = number(raw["shipping"], f"{item_id}/{comp_id} shipping")
+    normalized_total_usd: float | None = sold_price + shipping if currency == "USD" else None
+    if currency != "USD" and raw.get("normalized_total_usd") not in (None, ""):
+        normalized_total_usd = number(raw["normalized_total_usd"], f"{item_id}/{comp_id} normalized_total_usd")
+        if not str(raw.get("normalization_note", "")).strip():
+            raise ResearchError(f"{item_id}/{comp_id} foreign-currency normalization requires normalization_note")
     return {
         **raw, "comp_id": comp_id, "source_url": source_url,
         "transaction_status": status, "currency": currency,
         "comparability": comparability,
-        "sold_price": number(raw["sold_price"], f"{item_id}/{comp_id} sold_price"),
-        "shipping": number(raw["shipping"], f"{item_id}/{comp_id} shipping"),
+        "sold_price": sold_price, "shipping": shipping,
+        "normalized_total_usd": normalized_total_usd,
     }
 
 
@@ -230,6 +243,46 @@ def validate_exhaustion(raw: Any, item_id: str) -> dict[str, Any]:
     if not isinstance(candidates, list) or any(not str(candidate).strip() for candidate in candidates):
         raise ResearchError(f"{item_id} candidate_identifications_considered must be a list of nonblank strings")
     return {**raw, "reason_code": reason}
+
+
+def validate_price_synthesis(
+    raw: Any,
+    item_id: str,
+    usable: list[dict[str, Any]],
+    normalized_totals: list[float],
+    ledger_mid: float,
+    decision_basis: float,
+) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ResearchError(f"{item_id} price_synthesis must be an object")
+    required = {"method", "comp_ids", "raw_median", "adjusted_mid", "adjustment_reason"}
+    missing = sorted(required - set(raw))
+    if missing:
+        raise ResearchError(f"{item_id} price_synthesis is missing: {', '.join(missing)}")
+    if str(raw["method"]).strip().casefold() != "median":
+        raise ResearchError(f"{item_id} price_synthesis method must be median")
+    comp_ids = raw["comp_ids"]
+    expected_ids = {comp["comp_id"] for comp in usable}
+    if not isinstance(comp_ids, list) or len(comp_ids) != len(set(comp_ids)) or set(comp_ids) != expected_ids:
+        raise ResearchError(f"{item_id} price_synthesis comp_ids must exactly match included comparables")
+    if not usable or len(normalized_totals) != len(usable):
+        raise ResearchError(f"{item_id} cannot synthesize price until every included comp is USD-normalized")
+    calculated_median = statistics.median(normalized_totals)
+    recorded_median = number(raw["raw_median"], f"{item_id} price_synthesis raw_median")
+    adjusted_mid = number(raw["adjusted_mid"], f"{item_id} price_synthesis adjusted_mid")
+    if not math.isclose(recorded_median, calculated_median, abs_tol=0.01):
+        raise ResearchError(f"{item_id} recorded raw median does not match included comparable totals")
+    if not math.isclose(adjusted_mid, ledger_mid, abs_tol=0.01) or not math.isclose(adjusted_mid, decision_basis, abs_tol=0.01):
+        raise ResearchError(f"{item_id} adjusted median must match ledger mid and decision-basis values")
+    reason = str(raw["adjustment_reason"]).strip()
+    if not math.isclose(adjusted_mid, recorded_median, abs_tol=0.01) and not reason:
+        raise ResearchError(f"{item_id} price adjustment requires a nonblank reason")
+    return {
+        "method": "median",
+        "raw_median": recorded_median,
+        "adjusted_mid": adjusted_mid,
+        "adjusted": not math.isclose(adjusted_mid, recorded_median, abs_tol=0.01),
+    }
 
 
 def discriminating_tokens(name: str) -> set[str]:
@@ -343,7 +396,7 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
         attempts = [validate_attempt(value, item_id, seen_attempts) for value in raw_item.get("search_attempts", [])]
         comps = [validate_comp(value, item_id, seen_comps) for value in raw_item.get("comparables", [])]
         usable = [comp for comp in comps if comp["included"]]
-        totals = [comp["sold_price"] + comp["shipping"] for comp in usable]
+        totals = [comp["normalized_total_usd"] for comp in usable if comp["normalized_total_usd"] is not None]
         for comp in usable:
             included_url_items[comp["source_url"]].add(item_id)
 
@@ -354,8 +407,32 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
             url for attempt in attempts for url in attempt["opened_urls"]
             if direct_evidence_url(str(url))
         }
-        if len(queries) < 2 or len(strategies) < 2:
-            add_blocker(blockers, item_id, "INSUFFICIENT_SEARCH_COVERAGE", "Every item requires at least two distinct item-specific queries using at least two strategies.")
+        image_opened = {
+            url for attempt in attempts if attempt["strategy"] == "image_search"
+            for url in attempt["opened_urls"] if direct_evidence_url(str(url))
+        }
+        sold_opened = {
+            url for attempt in attempts if attempt["strategy"] == "marketplace_sold"
+            for url in attempt["opened_urls"] if direct_evidence_url(str(url))
+        }
+        google_used = any("google." in urlparse(attempt["search_url"]).netloc.casefold() for attempt in attempts)
+        if (
+            len(queries) < MIN_SEARCH_QUERIES
+            or len(strategies) < MIN_SEARCH_STRATEGIES
+            or "image_search" not in strategies
+            or "marketplace_sold" not in strategies
+            or len(surfaces) < 2
+            or not google_used
+        ):
+            add_blocker(
+                blockers, item_id, "INSUFFICIENT_SEARCH_COVERAGE",
+                "Every item requires four distinct queries, at least three strategies, Google web/image discovery, marketplace-sold research, and at least two surfaces.",
+            )
+        if len(direct_opened) < MIN_DIRECT_OPENED_PAGES or not image_opened or not sold_opened:
+            add_blocker(
+                blockers, item_id, "SHALLOW_RESEARCH",
+                "Every item requires at least four unique direct opened pages, including image-search evidence and completed-sale or auction evidence.",
+            )
         if sum(attempt["result_count"] for attempt in attempts) == 0:
             add_blocker(blockers, item_id, "NO_SEARCH_RESULTS", "All recorded searches returned zero results; research cannot be authorized without opened web evidence or a documented access failure.")
         name_tokens = discriminating_tokens(ledger[item_id].get("identified_name", ""))
@@ -375,49 +452,80 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
         basis = row.get("valuation_basis", "")
         confidence = row.get("valuation_confidence", "").casefold()
         decision = row.get("decision", "").upper()
-        exact_or_near = any(comp["comparability"] in {"exact", "near"} for comp in usable)
+        exact_or_near_count = sum(comp["comparability"] in {"exact", "near"} for comp in usable)
         unsupported = basis == "insufficient_evidence" or confidence not in {"medium", "high"} or not usable
         if decision != "REVIEW" and unsupported:
             add_blocker(blockers, item_id, "UNSUPPORTED_DISPOSITION", "A non-REVIEW decision requires usable evidence, a supported basis, and medium or high confidence.")
-        if decision != "REVIEW" and usable and not exact_or_near:
-            add_blocker(blockers, item_id, "BROAD_ONLY_DISPOSITION", "Broad category comparables alone cannot authorize a non-REVIEW decision.")
+        unique_usable_urls = {comp["source_url"] for comp in usable}
+        if decision != "REVIEW" and len(unique_usable_urls) < MIN_COMPLETED_COMPS:
+            add_blocker(blockers, item_id, "INSUFFICIENT_COMPLETED_COMPS", "A non-REVIEW decision requires at least three unique completed-sale transactions.")
+        if decision != "REVIEW" and exact_or_near_count < MIN_COMPLETED_COMPS:
+            add_blocker(blockers, item_id, "INSUFFICIENT_NEAR_COMPS", "At least three included comparables must be exact or near matches before disposition.")
+        if decision != "REVIEW" and not unique_usable_urls.issubset(direct_opened):
+            add_blocker(blockers, item_id, "UNOPENED_COMPARABLE", "Every included comparable must appear in the item's direct opened evidence.")
+        if decision != "REVIEW" and len(totals) != len(usable):
+            add_blocker(blockers, item_id, "UNNORMALIZED_CURRENCY", "Non-USD completed sales require a documented USD-normalized value before disposition.")
+
+        price_synthesis: dict[str, Any] | None = None
+        raw_values = [row.get(name) for name in ("market_value_low", "market_value_mid", "market_value_high", "decision_basis_value")]
+        if decision != "REVIEW" or any(str(value or "").strip() for value in raw_values):
+            try:
+                low = number(row.get("market_value_low"), f"{item_id} market_value_low")
+                mid = number(row.get("market_value_mid"), f"{item_id} market_value_mid")
+                high = number(row.get("market_value_high"), f"{item_id} market_value_high")
+                basis_value = number(row.get("decision_basis_value"), f"{item_id} decision_basis_value")
+                if not low <= mid <= high or not low <= basis_value <= high:
+                    add_blocker(blockers, item_id, "INVALID_VALUE_RANGE", "Low, mid, high, and decision-basis values must form one ordered supported range.")
+                boundary_zone = high >= 30 and low <= 65
+                if decision != "REVIEW" and boundary_zone and len(unique_usable_urls) < BORDERLINE_COMPLETED_COMPS:
+                    add_blocker(blockers, item_id, "BORDERLINE_RESEARCH_TOO_SHALLOW", "A value range touching $30-$65 requires at least five unique completed-sale transactions.")
+                if decision == "DONATE" and high >= 40:
+                    add_blocker(blockers, item_id, "RANGE_CROSSES_DISPOSITION_BOUNDARY", "DONATE is allowed only when the supported high value is below $40.")
+                elif decision == "CONFIRM DONATION" and not (low >= 40 and high < 50):
+                    add_blocker(blockers, item_id, "RANGE_CROSSES_DISPOSITION_BOUNDARY", "CONFIRM DONATION requires the entire supported range to remain from $40 through $49.99.")
+                elif decision == "SELL" and low < 50:
+                    add_blocker(blockers, item_id, "RANGE_CROSSES_DISPOSITION_BOUNDARY", "SELL requires the supported low value to be at least $50; otherwise use REVIEW.")
+                if decision != "REVIEW":
+                    try:
+                        price_synthesis = validate_price_synthesis(
+                            raw_item.get("price_synthesis"), item_id, usable, totals, mid, basis_value
+                        )
+                    except ResearchError as exc:
+                        add_blocker(blockers, item_id, "INVALID_PRICE_SYNTHESIS", str(exc))
+            except ResearchError as exc:
+                add_blocker(blockers, item_id, "INVALID_VALUE_RANGE", str(exc))
 
         exhausted = False
-        if not usable:
-            zero_comp_item_ids.add(item_id)
-            if decision != "REVIEW":
-                add_blocker(blockers, item_id, "ZERO_COMP_DISPOSITION", "An item with no usable completed-sale comparable must remain REVIEW.")
-            if len(queries) < 4 or "image_search" not in strategies or "marketplace_sold" not in strategies or len(surfaces) < 2:
-                add_blocker(blockers, item_id, "SEARCH_NOT_EXHAUSTED", "Zero-comp REVIEW requires four distinct queries, image search, marketplace sold search, and at least two surfaces.")
-            image_opened = {
-                url for attempt in attempts if attempt["strategy"] == "image_search"
-                for url in attempt["opened_urls"] if direct_evidence_url(str(url))
-            }
-            sold_opened = {
-                url for attempt in attempts if attempt["strategy"] == "marketplace_sold"
-                for url in attempt["opened_urls"] if direct_evidence_url(str(url))
-            }
-            if len(direct_opened) < 3 or not image_opened or not sold_opened:
-                add_blocker(
-                    blockers, item_id, "SHALLOW_ZERO_COMP_RESEARCH",
-                    "Zero-comp REVIEW requires at least three unique direct opened result pages, including opened image-search and completed-sale/auction evidence.",
-                )
+        if decision == "REVIEW" and len(usable) < MIN_COMPLETED_COMPS:
             try:
                 exhaustion = validate_exhaustion(raw_item.get("exhaustion"), item_id)
                 exhaustion_summaries[normalize_query(exhaustion["summary"])].append(item_id)
                 exhausted = True
             except ResearchError as exc:
                 add_blocker(blockers, item_id, "MISSING_EXHAUSTION_RECORD", str(exc))
+        if not usable:
+            zero_comp_item_ids.add(item_id)
+            if decision != "REVIEW":
+                add_blocker(blockers, item_id, "ZERO_COMP_DISPOSITION", "An item with no usable completed-sale comparable must remain REVIEW.")
+            if len(queries) < MIN_SEARCH_QUERIES or "image_search" not in strategies or "marketplace_sold" not in strategies or len(surfaces) < 2:
+                add_blocker(blockers, item_id, "SEARCH_NOT_EXHAUSTED", "Zero-comp REVIEW requires four distinct queries, image search, marketplace sold search, and at least two surfaces.")
+            if len(direct_opened) < MIN_DIRECT_OPENED_PAGES or not image_opened or not sold_opened:
+                add_blocker(
+                    blockers, item_id, "SHALLOW_ZERO_COMP_RESEARCH",
+                    "Zero-comp REVIEW requires at least four unique direct opened result pages, including opened image-search and completed-sale/auction evidence.",
+                )
 
         findings.append({
             "item_id": item_id, "search_attempt_count": len(attempts),
             "search_query_count": len(queries), "search_strategy_count": len(strategies),
             "search_surface_count": len(surfaces), "search_exhausted": exhausted,
+            "direct_opened_page_count": len(direct_opened),
             "included_comparable_count": len(usable),
             "excluded_comparable_count": len(comps) - len(usable),
             "normalized_total_low": min(totals) if totals else None,
             "normalized_total_median": statistics.median(totals) if totals else None,
             "normalized_total_high": max(totals) if totals else None,
+            "price_synthesis": price_synthesis,
         })
 
     for item_id in sorted(set(ledger) - seen_items):
@@ -445,6 +553,7 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
 
     return {
         "version": 2, "verification_mode": "current-research",
+        "research_policy_version": RESEARCH_POLICY_VERSION,
         "catalog_authorized": not blockers, "listing_authorized": False,
         "client_id": payload.get("client_id", ""), "intake_id": intake_id,
         "status": "PASS" if not blockers else "FAIL",

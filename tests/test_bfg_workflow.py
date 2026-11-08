@@ -9,9 +9,50 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "berryfine-goods-skill" / "scripts" / "bfg.py"
+sys.path.insert(0, str(SCRIPT.parent))
+
+from bfg import summarize_dispositions
 
 
 class BfgWorkflowTests(unittest.TestCase):
+    def test_disposition_summary_reconciles_all_states(self) -> None:
+        rows = [
+            {"item_id": "1", "decision": "SELL", "human_review_status": "PENDING"},
+            {"item_id": "2", "decision": "DONATE", "human_review_status": "PENDING"},
+            {"item_id": "3", "decision": "DONATE", "human_review_status": "PENDING"},
+            {"item_id": "4", "decision": "CONFIRM DONATION", "human_review_status": "PENDING"},
+            {"item_id": "5", "decision": "REVIEW", "human_review_status": "PENDING"},
+        ]
+        self.assertEqual(
+            summarize_dispositions(rows),
+            {
+                "total_items": 5,
+                "sell": 1,
+                "donate": 2,
+                "confirm_donation": 1,
+                "review": 1,
+                "needs_owner_attention": 2,
+                "human_review_pending": 5,
+                "invalid_decision_count": 0,
+                "duplicate_item_id_count": 0,
+                "reconciled": True,
+            },
+        )
+
+    def test_disposition_summary_fails_reconciliation_for_bad_rows(self) -> None:
+        result = summarize_dispositions([
+            {"item_id": "same", "decision": "SELL", "human_review_status": "PENDING"},
+            {"item_id": "same", "decision": "WAIT", "human_review_status": "PENDING"},
+        ])
+        self.assertFalse(result["reconciled"])
+        self.assertEqual(result["invalid_decision_count"], 1)
+        self.assertEqual(result["duplicate_item_id_count"], 1)
+
+    def test_current_audit_contract_requires_research_policy_version(self) -> None:
+        text = SCRIPT.read_text(encoding="utf-8-sig")
+        self.assertIn('REQUIRED_RESEARCH_POLICY_VERSION = "2.5.0"', text)
+        self.assertIn('"STALE_RESEARCH_POLICY"', text)
+
     def test_legacy_audit_reproduces_regression_failure_classes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); manifest = root / "manifest.json"; ledger = root / "ledger.csv"; catalog = root / "client" / "Client New Catalog.xlsx"; exceptions = root / "client" / "Prior Run" / "Client Exceptions.xlsx"
