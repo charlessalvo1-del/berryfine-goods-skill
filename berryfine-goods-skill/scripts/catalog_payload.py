@@ -13,7 +13,7 @@ from bfg_integrity import atomic_write_json, sha256_file, sha256_json
 from inventory_ledger import InventoryError, read_ledger, validate_row
 
 
-REQUIRED_RESEARCH_POLICY_VERSION = "2.6.0"
+REQUIRED_RESEARCH_POLICY_VERSION = "2.7.0-pilot"
 
 
 class CatalogPayloadError(ValueError):
@@ -45,11 +45,16 @@ def load_grouping(path: Path, intake_id: str) -> tuple[dict[str, dict[str, str]]
 
 
 def history(row: dict[str, str]) -> str:
+    supported_range = (
+        f"{row['market_value_low']}-{row['market_value_high']}"
+        if row.get("market_value_low") and row.get("market_value_high")
+        else "not established"
+    )
     sections = [
         f"{row['decision']}. {row['identified_name']}.",
         f"Condition: {row['condition_grade']}; {row['condition_notes']}",
         f"Identification: {row['identification_confidence']}; {row['identification_basis']}",
-        f"Valuation: {row['comp_summary']} Supported range {row['currency']} {row['market_value_low']}-{row['market_value_high']}; eBay {row.get('ebay_price') or 'n/a'}, local {row.get('local_price') or 'n/a'}, quick sale {row.get('quick_sale_price') or 'n/a'}.",
+        f"Valuation: {row['comp_summary']} Supported range {row['currency']} {supported_range}; eBay {row.get('ebay_price') or 'n/a'}, local {row.get('local_price') or 'n/a'}, quick sale {row.get('quick_sale_price') or 'n/a'}.",
     ]
     if row.get("testing_status") == "PLANNED":
         sections.append(f"Testing planned: tested-working value {row['value_if_tested_working']}; untested value {row['value_if_untested']}. {row['testing_notes']}")
@@ -144,7 +149,11 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             "description": row["identified_name"],
             "location": "Storage",
             "quantity": int(float(row["quantity"])),
-            "estimated_value": float(row.get("decision_basis_value") or 0),
+            "estimated_value": (
+                float(row["decision_basis_value"])
+                if row.get("decision_basis_value")
+                else None
+            ),
             "consign_length": "",
             "history_info": history(row),
             "column_i": "",

@@ -6,6 +6,7 @@ Thumbs.db
 .vscode/
 test-output/
 tests/artifacts/
+.tmp/
 
 # Never commit client catalogs, ledgers, intake photos, or audit records.
 *.xlsx

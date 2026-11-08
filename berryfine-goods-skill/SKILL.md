@@ -1,6 +1,6 @@
 ---
 name: berryfine-goods-skill
-description: Process single items or large client photo folders into fail-closed consignment inventory; validate real image content, reconcile blind grouping reviews, identify photographed goods, audit structured completed-sale comparables, estimate resale prices, recommend SELL, DONATE, REVIEW, or CONFIRM DONATION, generate paired client workbooks, preserve template colors and locations, hash-seal intake evidence, and track testing and realized outcomes. Use for pre-BFG intake, day-long bulk photo sessions, hundreds of item photos, resumable estate or consignment processing, catalog creation, inventory updates, valuation refreshes, delivery audits, and listing preparation.
+description: Process single items or large client photo folders into fail-closed consignment inventory; validate real image content, reconcile blind grouping reviews, identify photographed goods, audit structured Etsy and eBay marketplace evidence, estimate resale prices, recommend SELL, DONATE, REVIEW, or CONFIRM DONATION, generate paired client workbooks, preserve template colors and locations, hash-seal intake evidence, and track testing and realized outcomes. Use for pre-BFG intake, day-long bulk photo sessions, hundreds of item photos, resumable estate or consignment processing, catalog creation, inventory updates, valuation refreshes, delivery audits, and listing preparation.
 ---
 
 # Berryfine Goods Skill
@@ -11,12 +11,14 @@ Turn photographed goods into an evidence-backed, client-specific inventory. Keep
 
 - Read [references/inventory-schema.md](references/inventory-schema.md) before creating, merging, or exporting an inventory.
 - Read [references/research-and-valuation.md](references/research-and-valuation.md) before researching comps or assigning prices.
-- Read [references/research-audit-schema.md](references/research-audit-schema.md) before writing completed-sale evidence.
+- Read [references/research-audit-schema.md](references/research-audit-schema.md) before writing direct marketplace evidence.
 - Read [references/bulk-photo-intake.md](references/bulk-photo-intake.md) before processing a folder or producing a template-matched client catalog.
 - Run `scripts/inventory_ledger.py --help` when managing a persistent client ledger or listing queue.
 - Run `scripts/photo_manifest.py --help` before scanning a large photo folder.
 - Run `scripts/preflight_lock.py --help` before every new intake or retest.
 - Run `scripts/sequence_review_gate.py --help` before grouping a flat, unnumbered camera roll.
+- Run `scripts/research_gate.py --help` only when validating a retained legacy v2.6 research audit.
+- Run `scripts/adaptive_market_gate.py --help` for v2.7 pilot research.
 - Run `scripts/delivery_gate.py --help` before reporting a batch complete.
 - Run `scripts/catalog_gate.py --help` after spreadsheet authoring and before the delivery gate.
 - Run `scripts/bfg.py doctor` after installation and `scripts/bfg.py audit` before reporting any intake complete.
@@ -189,37 +191,31 @@ Record `identification_basis`, `visible_markings`, and `missing_evidence`. Reque
 
 Use the standing BFG condition assumption for valuation: unless positive photographic or owner-supplied evidence shows otherwise, treat the item as complete, functional, suitable for sale, and in typical good used condition. Record `condition_basis=assumed_standard_saleable`, `condition_grade=good`, and state that physical inspection was not performed. Missing condition detail alone must not cause `REVIEW`, a low-grade classification, or a damage discount. Use `observed` or `owner_reported` only when positive evidence supports a different condition. Keep safety, legality, authenticity, recall, and marketplace-policy uncertainty separate from condition grade.
 
-## Research completed sales
+## Research identity and market price
 
-Research sold or completed transactions, not active asking prices. Follow [references/research-and-valuation.md](references/research-and-valuation.md).
+Follow [references/research-and-valuation.md](references/research-and-valuation.md). Keep identification confidence separate from pricing confidence: a confirmed object may still have low-confidence pricing, and a strong price cluster does not prove the proposed identity.
 
-Search using the most discriminating confirmed attributes first. Use general web and image search to identify unmarked or visually distinctive goods, then search marketplace sold filters and auction archives for valuation. Prefer three to eight recent, comparable sales when available. Capture source URL, marketplace, sale date, sold price, shipping, condition, and comparability notes for every comp.
+Use an adaptive `6 / 8 / 10` search ladder for every item. The first six attempts must include general web discovery, image search, Etsy-first marketplace discovery, an eBay cross-check, and at least three materially different strategies. Stop at six only when four exact or near direct marketplace prices form a stable cluster and the supported range has at least a $5 buffer from the $40 and $50 disposition boundaries. Otherwise continue to eight.
 
-Use eBay Product Research as the preferred eBay completed-sale source when available because ordinary sold pages may not expose an accepted Best Offer price. Use active listings and image-search results for identification vocabulary only, never as sold-price evidence. Do not scrape a restricted sold-data interface; capture visible evidence from an authorized human research session.
+At eight attempts, three consistent exact or near direct prices may authorize a medium-confidence decision when coefficient of variation is at most 0.25, highest-to-lowest ratio is at most 1.75, and the range has at least a $5 boundary buffer. Otherwise stop with `REVIEW` and the exact operational label `$40-$50 STAFF DECISION` when a low-value item remains uncertain, its high bound is below $125, and further search is unlikely to change the staff decision. Do not run attempts nine or ten merely to distinguish donation from a marginal sale. Continue to ten only for a plausible high-value, rare, collector-significant, regulated, or materially misidentified item. Record the stop tier and an item-specific reason.
 
-For every item, record at least four distinct item-specific queries using at least three strategies, including Google web or image discovery, image search, and marketplace-sold or auction research. Store the reproducible search URL, returned URLs, and URLs actually opened. Query text alone is not research evidence. Open at least four unique direct result pages; reopening one page through different queries counts once. Search-result pages, category pages, pricing indexes, and storefront indexes do not count as opened item evidence. A nonzero result count requires opened evidence, and an item whose searches all claim zero results blocks the batch for search-access or query correction. Record the closest candidates, rejection reasons, and next evidence required. `REVIEW` is not permission to skip research.
+Etsy is the preferred pricing surface; use eBay active and sold/Product Research pages as cross-checks. Included pricing evidence may be current active or completed/sold listings only when the direct page is opened, the item is exact or near, the price is normalized to a one-item USD total, and the URL and evidence capture are unique. Require at least three included prices for any non-`REVIEW` disposition and target four. Do not call an active price a realized sale.
 
-Four searches are a minimum rather than a stopping rule. Continue until the evidence requirement is satisfied, two successive materially different queries add no new credible candidate, or access is explicitly blocked. Record an item-specific `search_completion` status and stop reason. Record a result count only when the interface displayed or returned that count; otherwise store it as unavailable rather than inventing a number.
+Auction data is identification-only. It can establish maker, model, age, terminology, or collector significance, but it must never enter the price calculation. Category pages, search pages, storefronts, snippets, price guides, sponsored results, and broad analogues cannot be included as pricing comps.
 
-For every included completed transaction, capture evidence method, a SHA-256 digest of the screenshot/HAR/WACZ or equivalent record, explicit price and sale-date verification, quantity and lot-allocation treatment, and normalization provenance. Reject catalog, category, search, storefront, or auction-index pages as included comparables. Foreign-currency transactions require the original currency plus the exchange rate, rate date, and rate source.
+For included prices, calculate the active-market anchor exactly:
 
-A non-`REVIEW` disposition requires at least three unique completed-sale transactions, all opened directly and at least three rated exact or near. Use five completed transactions when the supported range touches $30 through $65. Synthesize the central price with the median of the included normalized totals, not a simple average, and document any condition or completeness adjustment. If every included transaction is not normalized to USD, or fewer than the required transactions can be defended, use `REVIEW` rather than force a price.
+- `A` = arithmetic mean of cleaned normalized prices
+- `H80` = 80% of the highest cleaned price
+- `B` = `(A + H80) / 2`, clamped to the cleaned price range
+- recommended Etsy price = `B * 0.95`
+- recommended eBay price = `B * 1.05`
 
-Do not use a fixed category-comp library or generic keyword routing as a substitute for item-level search. Do not let a keyword such as `cameo`, `amber`, `turquoise`, `military`, or `Japanese` automatically force `REVIEW`; research the photographed object and reserve `REVIEW` for the unresolved uncertainty itself. If search results reveal that the initial object type or material was wrong, revise the identification before valuing it.
+The range, not the midpoint, controls disposition. A four-price cluster is stable only when its coefficient of variation is at most 0.25 and its highest-to-lowest ratio is at most 1.75. Record every attempt, direct opened URL, inclusion or rejection reason, evidence digest, identification assessment, pricing confidence, synthesis inputs, and stop rationale. Query text alone is not evidence, and `REVIEW` is not permission to skip the ladder.
 
-When ten or more items still have zero comps, record the complete first-pass zero-comp population and independently challenge every item in it before authorizing the batch. Prefer visible brands, titles, ISBNs, UPCs, model numbers, named makers, and distinctive forms first, but do not stop after a minimum sample. The challenge must open direct evidence and must not assume the first pass is correct. Integrate every missed identity or completed sale and record that the challenge expanded to the full first-pass population. Store the challenge run, findings, opened URLs, correction count, and integration status in the schema-version-2 audit.
+Use Google web/image discovery when available. The approved integrated web/image search may substitute for Google discovery when browser access cannot scale, but label the surface honestly. Do not claim a Google search that was not performed. Never scrape a restricted eBay interface; capture visible evidence from an authorized session.
 
-Store schema-version-2 evidence in the structured format defined by [references/research-audit-schema.md](references/research-audit-schema.md), then run `scripts/research_gate.py`. The gate must verify search coverage, prevent overused comparable URLs, and reconcile the count and URLs of included comparables to the ledger. Do not allow an unsupported or low-confidence valuation to authorize any non-`REVIEW` disposition; use `REVIEW` only after the required search is exhausted.
-
-Exclude or down-weight:
-
-- unsold and active listings
-- sponsored results and price-guide snippets without transaction evidence
-- different models, sizes, materials, editions, quantities, or included accessories
-- parts-only sales when valuing a complete working item
-- extreme outliers without an explainable reason
-
-If completed-sale evidence is unavailable, say so and use a clearly labeled fallback. Never describe an asking price as a sold comp.
+Store the v2.7 pilot audit in the structured format defined by [references/research-audit-schema.md](references/research-audit-schema.md), then run `scripts/adaptive_market_gate.py`. The gate must reconcile the exact research population to the ledger and fail closed on missing attempts, weak direct evidence, auction pricing, non-reproducible formulas, or unsupported confidence. Do not allow low-confidence pricing to authorize a non-`REVIEW` disposition.
 
 ## Value and decide
 
@@ -307,7 +303,7 @@ Generate `catalog-payload.json` with `scripts/catalog_payload.py`. On Windows PC
 4. Enforce this client-catalog column contract:
    - Preserve the existing columns through column I, including column I's exact header, position, historical values, formulas, and formatting. Do not rename `Column1`, `Sold Price`, or another template-specific column I header. Leave column I blank on a newly appended row unless the supplied client template or the user defines a value for it.
    - Keep column D's header as `LOCATION`. Preserve every pre-populated column D value exactly, including blanks. Write the exact text `Storage` only in column D for newly appended rows. Do not normalize, replace, or backfill retained location data.
-   - Keep column H's header as `HISTORY/INFO`. Put the detailed client-facing response in column H: defensible identification, visible condition and completeness, completed-sale valuation basis, supported price guidance, collector or variant notes, and the tested-working versus untested value difference when testing is planned. Keep comp URLs and extended research evidence in the centralized audit record rather than overloading the catalog cell.
+   - Keep column H's header as `HISTORY/INFO`. Put the detailed client-facing response in column H: defensible identification, visible condition and completeness, direct-market valuation basis, supported price guidance, collector or variant notes, and the tested-working versus untested value difference when testing is planned. Keep comp URLs and extended research evidence in the centralized audit record rather than overloading the catalog cell.
    - Add column J with the exact header `RECOMMENDED ACTION`. Populate current-intake rows with exactly `SELL`, `DONATE`, `REVIEW`, or `CONFIRM DONATION` from the validated `decision` field so the column sorts and filters cleanly. When introducing J to a template that did not have it, leave retained historical rows blank unless the user explicitly requests a fresh appraisal. When the template already has J, preserve every retained J value and style exactly unless that row is explicitly reappraised. Never write testing status in this column.
    - Extend the header style, filter or table range, print area, and column width through J without shifting or overwriting columns A through I.
 5. Add one row per unique independently sellable item or intentional lot.

@@ -222,7 +222,7 @@ class LegacyCatalogRefreshTests(unittest.TestCase):
             plan_data = json.loads(plan.read_text(encoding="utf-8"))
             self.assertEqual(
                 plan_data["action_counts"],
-                {"CONFIRM DONATION": 1, "DONATE": 1, "REVIEW": 1, "SELL": 1},
+                {"DONATE": 1, "REVIEW": 2, "SELL": 1},
             )
             self.assertEqual(plan_data["policy_migration_count"], 1)
             self.assertFalse(plan_data["listing_authorized"])
@@ -282,8 +282,8 @@ class LegacyCatalogRefreshTests(unittest.TestCase):
             )
             self.assertEqual(built.returncode, 0, built.stderr)
             payload_data = json.loads(payload.read_text(encoding="utf-8"))
-            self.assertEqual(payload_data["summary"]["review"], 1)
-            self.assertEqual(payload_data["summary"]["confirm_donation"], 1)
+            self.assertEqual(payload_data["summary"]["review"], 2)
+            self.assertEqual(payload_data["summary"]["confirm_donation"], 0)
             self.assertEqual(payload_data["summary"]["exception_count"], 2)
             self.assertFalse(payload_data["listing_authorized"])
 

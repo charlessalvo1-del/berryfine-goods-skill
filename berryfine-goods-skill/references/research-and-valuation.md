@@ -4,16 +4,14 @@
 
 Prefer:
 
-1. Direct completed or sold marketplace records for the same item
-2. Auction-house realized results with buyer's premium treatment understood
-3. Specialist dealer sold archives or reputable collector databases
-4. Broad category comps adjusted for known differences
-5. Active asking prices only as a labeled last-resort context signal
+1. Direct exact or near Etsy active listings
+2. Direct exact or near eBay sold/Product Research records
+3. Direct exact or near eBay active listings
+4. General web, image, specialist, and auction references for identification only
 
-Record the evidence class in `valuation_basis`. Only `sold_comparables`,
-`auction_results`, or a documented `expert_reference` can support `READY`.
-Active listings and price guides may inform a provisional range, but must remain
-`NEEDS_RESEARCH` or `REVIEW`.
+Etsy is the preferred pricing surface and eBay is the cross-check. Active and sold prices may be combined when every included page is direct, current, exact or near, normalized to a one-item USD total, and deduplicated. Label active listings as asking prices and sold listings as realized transactions. Auction prices are never valuation inputs; use auction evidence only to identify the object or detect collector significance.
+
+Record the evidence class in `valuation_basis`. Only a qualifying direct Etsy/eBay price set may support a non-`REVIEW` decision under the v2.7 pilot.
 
 Use current web research for every valuation request. Do not reuse old prices without refreshing them.
 
@@ -27,45 +25,45 @@ Treat identification and valuation as two linked but separate searches. First de
 
 Build a visual search fingerprint from all photographs before searching: object type, likely material, construction, silhouette, color, handle/hinge/lid/spout/hardware geometry, decoration, markings, and apparent era. If the first results disagree with the initial category or material, correct the identification and search again. For example, visible screws, a rolled metal rim, and a black metal interior outweigh a superficial "ceramic teapot" impression.
 
-Use this query ladder. Every item must record at least four distinct queries across at least three strategies and open at least four unique direct pages:
+Use this adaptive query ladder. Every item records exactly 6, 8, or 10 distinct attempts across at least three strategies:
 
 1. exact visible maker/model/marking in quotes
 2. distinctive visual fingerprint without an assumed maker
 3. image search using the clearest full-object image and, when useful, a crop of the mark or distinctive hardware
 4. candidate maker/model plus a feature that can falsify the match
-5. candidate identity plus `sold`, `completed`, or an auction-results surface
+5. candidate identity on Etsy, then eBay active and sold/Product Research surfaces
 6. synonyms, regional terms, translated markings, and alternate spellings when the first language or category vocabulary fails
 
-Google or another general web/image search is appropriate for identification leads. Marketplace sold filters and auction archives are required for valuation evidence. Record the actual query, reproducible search URL, search surface, returned URLs, URLs actually opened, result count, outcome, and time in the research audit. Query text without opened evidence does not prove that a search occurred.
+Google or the approved integrated web/image search is appropriate for identification leads. Record the actual query, reproducible search URL, search surface, URLs actually opened, outcome, and time. Label the surface honestly. Query text without opened evidence does not prove that a candidate page was verified.
 
-Do not use a fixed category-comparable library as a substitute for item-level research. One completed-sale URL may support at most three genuinely similar items, and each item still needs its own search log and comparability analysis.
+Do not use a fixed category-comparable library as a substitute for item-level research. One direct comparable URL may support at most three genuinely similar items, and each item still needs its own search log and comparability analysis.
 
 ## Comp capture
 
-For each candidate comp, capture:
+For each candidate pricing comp, capture:
 
 - direct URL
 - marketplace or auction house
-- sale or close date
+- listing status and capture date; sale date when applicable
 - item title
-- sold or realized price
+- displayed active or realized price
 - shipping when shown
 - currency
 - condition and completeness
 - match differences
 - include/exclude decision
 - evidence method and SHA-256 of the screenshot, HAR, WACZ, or equivalent capture
-- explicit confirmation that the sold price and sale date were visible in the captured evidence
+- explicit confirmation that the direct page and displayed price were visible in the captured evidence
 - lot quantity and any per-unit allocation
 - original currency plus dated exchange-rate source when conversion is required
 
 Write these fields as one structured comparable object using [research-audit-schema.md](research-audit-schema.md). Run `research_gate.py` before catalog generation. A narrative list of URLs does not substitute for structured evidence or exact ledger reconciliation.
 
-Do not claim a price is completed merely because a search result says "sold" without opening enough evidence to verify the transaction state.
+Do not claim a price is completed merely because a search result says "sold" without opening enough evidence to verify the transaction state. Do not call an active asking price a sale.
 
-Use eBay Product Research as the preferred eBay sold source because it exposes accepted Best Offer prices and a longer history than ordinary sold search. Use Google web/image search, Lens-style discovery, and active marketplace listings to identify candidates and improve vocabulary, but never treat an active listing as sold-price evidence. Do not scrape restricted sold-data interfaces; use a human-authenticated research session and capture the visible evidence.
+Use eBay Product Research as the preferred eBay sold source when available because it exposes accepted Best Offer prices and a longer history than ordinary sold search. Etsy active prices are the preferred current-market anchor; eBay active and sold prices cross-check it. Do not scrape restricted sold-data interfaces; use a human-authenticated research session and capture visible evidence.
 
-Treat four distinct searches as a minimum, not an automatic stopping point. Continue until completed-sale depth is sufficient, two successive materially different queries add no new credible candidate, or access/evidence is explicitly blocked. Record `search_completion.status` as `evidence_sufficient`, `saturated`, or `blocked` with an item-specific stop reason.
+At attempt six, stop only with four stable included prices and a range at least $5 away from both decision boundaries. Otherwise continue to eight. At eight, three consistent prices may authorize medium-confidence disposition when coefficient of variation is at most 0.25, highest-to-lowest ratio is at most 1.75, and the range has a $5 boundary buffer. Otherwise use `$40-$50 STAFF DECISION` when the item is low value, the high bound is below $125, and further research is unlikely to improve the staff decision. Continue to ten only for plausible high-value, rare, collector-significant, regulated, or materially misidentified items. Record `search_completion.stop_tier`, `stop_reason`, and the boundary flag where applicable.
 
 ## Standard saleable condition assumption
 
@@ -89,20 +87,19 @@ Use older sales for rare items when necessary and say why.
 
 Remove false matches first. Explain meaningful outliers instead of mechanically averaging them.
 
-Require three unique, directly opened completed transactions before any non-`REVIEW` disposition. Require five when the supported range touches $30 through $65. When enough comps exist:
+Require three unique, directly opened exact or near Etsy/eBay prices before any non-`REVIEW` disposition and target four. When enough comps exist:
 
-- use the lower comparable cluster for `market_value_low`
-- use the median normalized total of the best matches for `market_value_mid`; do not use a simple mean with only three comps
-- use the upper defensible cluster for `market_value_high`
-- set `ebay_price` near the upper-middle of the supported range when normal negotiation is expected
-- set `local_price` for local demand, pickup convenience, and avoided shipping/fees
-- set `quick_sale_price` below the central estimate, normally near the low end
+- `A` is the arithmetic mean of cleaned normalized prices
+- `H80` is 80% of the highest cleaned price
+- `B` is `(A + H80) / 2`, clamped to the cleaned price range
+- Etsy recommendation is `B * 0.95`
+- eBay recommendation is `B * 1.05`
+- use the defensible cleaned cluster for `market_value_low` and `market_value_high`
+- set local and quick-sale prices separately for pickup convenience and speed
 
 Adjust for positively evidenced condition differences, completeness, testing, authenticity confidence, seasonality, shipping difficulty, and lot size. Do not discount for hypothetical damage or missing condition detail. State material adjustments.
 
-Record a `price_synthesis` object containing `method=median`, every included comp ID, the raw median, the adjusted midpoint, and the adjustment reason. The adjusted midpoint must match both the ledger midpoint and decision-basis value. If a non-USD sale is included, normalize it to USD with a dated exchange-rate note before synthesis.
-
-Do not apply a universal percentage formula when the evidence suggests marketplace-specific demand.
+Record a reproducible `price_synthesis` object containing the cleaned average, highest cleaned price, `H80`, clamped anchor, Etsy price, and eBay price. A four-price set is stable only when coefficient of variation is at most 0.25 and highest-to-lowest ratio is at most 1.75. If a non-USD listing is included, normalize it to USD with a dated exchange-rate note before synthesis.
 
 ## Insufficient evidence
 
@@ -119,7 +116,7 @@ If a provisional range is still useful, label it as low confidence.
 Set `valuation_basis` to `insufficient_evidence` when no defensible source
 class applies.
 
-`REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete at least four distinct query formulations across at least two surfaces, including image search and a completed-sale search. Open at least four unique direct result pages, including a result reached through image search and a direct completed-sale or auction candidate. Search pages, category indexes, pricing pages, and storefront pages do not count. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion, and the same exhaustion text may not be copied across unrelated items.
+`REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete the applicable 8- or 10-attempt ladder, including image discovery, Etsy, and eBay. Search pages, category indexes, pricing pages, storefront pages, and auction prices do not count as included pricing evidence. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion, and the same exhaustion text may not be copied across unrelated items.
 
 Apply disposition thresholds to uncertainty ranges. `DONATE` requires a high bound below $40; `CONFIRM DONATION` requires the entire range to remain within $40-$49.99; `SELL` requires a low bound of at least $50. A range crossing either threshold remains `REVIEW` even when its midpoint falls cleanly into one band.
 

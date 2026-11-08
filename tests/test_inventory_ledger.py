@@ -152,7 +152,7 @@ class InventoryLedgerTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("human_review_status APPROVED", result.stderr)
 
-    def test_sell_below_threshold_requires_override(self) -> None:
+    def test_range_crossing_threshold_requires_review(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             batch = temp / "batch.json"
@@ -172,9 +172,9 @@ class InventoryLedgerTests(unittest.TestCase):
                 "upsert", "--ledger", temp / "inventory.csv", "--input", batch
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn("requires decision_override_reason", result.stderr)
+            self.assertIn("requires REVIEW; got SELL", result.stderr)
 
-    def test_donate_at_forty_dollars_requires_confirmation(self) -> None:
+    def test_crossing_donation_boundary_requires_review(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             batch = temp / "batch.json"
@@ -190,7 +190,7 @@ class InventoryLedgerTests(unittest.TestCase):
                 "upsert", "--ledger", temp / "inventory.csv", "--input", batch
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn("donation_confirmation_status CONFIRMED", result.stderr)
+            self.assertIn("requires REVIEW; got DONATE", result.stderr)
 
     def test_forty_dollar_band_requires_confirm_donation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -198,7 +198,7 @@ class InventoryLedgerTests(unittest.TestCase):
             batch = temp / "batch.json"
             borderline = item("a-001")
             borderline.update(
-                market_value_low=35,
+                market_value_low=40,
                 market_value_mid=45,
                 market_value_high=49,
                 decision_basis_value=45,
@@ -226,7 +226,7 @@ class InventoryLedgerTests(unittest.TestCase):
             )
             self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
-    def test_sell_in_forty_dollar_band_requires_declined_confirmation(self) -> None:
+    def test_sell_is_rejected_when_range_crosses_thresholds(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             batch = temp / "batch.json"
@@ -248,20 +248,9 @@ class InventoryLedgerTests(unittest.TestCase):
                 "upsert", "--ledger", temp / "inventory.csv", "--input", batch
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn("donation_confirmation_status DECLINED", result.stderr)
+            self.assertIn("requires REVIEW; got SELL", result.stderr)
 
-            borderline.update(
-                donation_confirmation_status="DECLINED",
-                donation_confirmed_by="BFG reviewer",
-                donation_confirmed_at="2026-08-02T10:00:00-04:00",
-            )
-            batch.write_text(json.dumps([borderline]), encoding="utf-8")
-            accepted = self.run_script(
-                "upsert", "--ledger", temp / "inventory.csv", "--input", batch
-            )
-            self.assertEqual(accepted.returncode, 0, accepted.stderr)
-
-    def test_confirmed_forty_dollar_item_can_transition_to_donate(self) -> None:
+    def test_confirmed_forty_dollar_item_cannot_bypass_range_rule(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             batch = temp / "batch.json"
@@ -280,7 +269,8 @@ class InventoryLedgerTests(unittest.TestCase):
             result = self.run_script(
                 "upsert", "--ledger", temp / "inventory.csv", "--input", batch
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("requires CONFIRM DONATION; got DONATE", result.stderr)
 
     def test_review_in_band_requires_independent_uncertainty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

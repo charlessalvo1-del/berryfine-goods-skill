@@ -1,8 +1,10 @@
 # Berryfine Goods Skill
 
-Version 2.6.0 makes research evidence-first. Search counts must be observed rather than manufactured, included transactions require verified price/date evidence and direct transaction pages, foreign-currency conversions require dated rate provenance, and search continues past four queries until evidence is sufficient or a documented saturation condition is reached. It also adopts the BFG standard-saleable condition assumption: absent positive contrary evidence, value items as complete, functional, saleable, and in typical good used condition; missing condition detail alone does not cause REVIEW. Version 2.5.0 multi-comp and median-pricing protections remain in force.
+Version 2.7.0 pilots adaptive active/sold marketplace research. Every item follows a six-, eight-, or ten-attempt ladder with Etsy-first discovery, eBay cross-checks, direct-page evidence, separate identification and pricing confidence, and a low-value `$40-$50 STAFF DECISION` stop after eight attempts. Non-REVIEW decisions require at least three exact or near direct prices, with four targeted; auction results are identification-only. Pricing uses a reproducible cleaned-average/high-price anchor, with Etsy at 5% below the anchor and eBay at 5% above it. The full supported range, never the midpoint alone, controls disposition.
 
-The release also supports bulk, unnumbered photo intake with real image-signature and hash validation, blind-review provenance, deterministic grouping application, structured completed-sale evidence, automatic catalog/Exceptions payloads, reusable Excel automation, immutable audit seals, outcome tracking, and a single workflow audit command. Warehouse tracking is intentionally outside this repository and remains a separate future system.
+The standard-saleable condition assumption remains in force: absent positive contrary evidence, value items as complete, functional, saleable, and in typical good used condition. Missing condition detail alone does not cause REVIEW.
+
+The release also supports bulk, unnumbered photo intake with real image-signature and hash validation, blind-review provenance, deterministic grouping application, structured direct-market evidence, automatic catalog/Exceptions payloads, reusable Excel automation, immutable audit seals, outcome tracking, and a single workflow audit command. Warehouse tracking is intentionally outside this repository and remains a separate future system.
 
 Before a real intake, run:
 
@@ -15,7 +17,7 @@ Before delivery, run `bfg.py audit` with the exact client folder, iteration-reco
 Berryfine Goods Skill turns one item or hundreds of client inventory photos into
 an evidence-backed consignment catalog. It supports flat camera rolls and
 folder-per-item intake, automated photo grouping, exact-item identification,
-completed-sale research, value estimates, client catalog creation, categorized
+adaptive Etsy/eBay market research, value estimates, client catalog creation, categorized
 photo folders, exceptions reporting, and a persistent inventory ledger per
 client. It produces drafts and review artifacts; it never publishes a listing.
 
@@ -81,7 +83,7 @@ iterations.
    change after confirmation stops the run and requires a new preflight.
 4. Group photos with independent forward, reverse, adjudication, and cohesion
    passes for flat camera rolls; folder intake follows the same cohesion checks.
-5. Identify items, research completed sales, value them, and update the canonical
+5. Identify items, run the adaptive Etsy/eBay market ladder, value them, and update the canonical
    client ledger. Every AI-created listing remains human-review `PENDING`.
 6. Author the new catalog and Exceptions workbook from the supplied template,
    then run `catalog_gate.py` to verify content and formatting deterministically.

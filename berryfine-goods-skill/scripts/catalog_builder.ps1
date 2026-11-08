@@ -23,6 +23,13 @@ function Get-Sha256([string]$Path) {
 function Set-TextCell($cell, [object]$value) {
     $text = if ($null -eq $value) { '' } else { [string]$value }
     $cell.NumberFormat = '@'
+    # Assigning an empty PowerShell string through some Excel COM versions can
+    # coerce a cell's existing metadata (for example, row height) into the
+    # value. Clear empty payload fields explicitly instead.
+    if ([string]::IsNullOrEmpty($text)) {
+        $cell.ClearContents()
+        return
+    }
     if ($text -match '^[=+@-]') { $cell.Value2 = "'$text" } else { $cell.Value2 = $text }
 }
 
@@ -40,7 +47,7 @@ function Find-CatalogSheet($book) {
     throw 'Unable to find a catalog sheet with LOCATION in D and HISTORY/INFO in H.'
 }
 
-$payload = Get-Content -Raw -LiteralPath $PayloadPath | ConvertFrom-Json
+$payload = Get-Content -Raw -Encoding UTF8 -LiteralPath $PayloadPath | ConvertFrom-Json
 $catalogRows = @($payload.catalog_rows)
 $exceptionRows = @($payload.exceptions)
 if ($catalogRows.Count -lt 1) { throw 'Catalog payload contains no rows.' }
@@ -120,7 +127,9 @@ try {
     $retainedFormatLastCol = if ($templateHasActionColumn) { 10 } else { 9 }
     [void]$templateSheet.Range($templateSheet.Cells.Item(1, 1), $templateSheet.Cells.Item($formattedLastRow, $retainedFormatLastCol)).Copy()
     [void]$sheet.Range($sheet.Cells.Item(1, 1), $sheet.Cells.Item($formattedLastRow, $retainedFormatLastCol)).PasteSpecial($xlPasteFormats)
-    $excel.CutCopyMode = 0
+    # Do not assign CutCopyMode here. Some Excel interop versions expose it as
+    # a strict enum that accepts only xlCopy/xlCut and reject both 0 and false;
+    # the following writes replace any transient copy state safely.
     $templateBook.Close($false); $templateBook = $null
     if ($sheet.AutoFilterMode) { $sheet.AutoFilterMode = $false }
     $sheet.Range($sheet.Cells.Item($headerRow, 2), $sheet.Cells.Item($finalRow, 10)).AutoFilter() | Out-Null
@@ -144,7 +153,12 @@ try {
         Set-TextCell $sheet.Cells.Item($rowNumber, 3) $record.description
         Set-TextCell $sheet.Cells.Item($rowNumber, 4) 'Storage'
         $sheet.Cells.Item($rowNumber, 5).Value2 = [double]$record.quantity; $sheet.Cells.Item($rowNumber, 5).NumberFormat = '0'
-        $sheet.Cells.Item($rowNumber, 6).Value2 = [double]$record.estimated_value; $sheet.Cells.Item($rowNumber, 6).NumberFormat = '$#,##0.00'
+        if ($null -eq $record.estimated_value -or [string]::IsNullOrWhiteSpace([string]$record.estimated_value)) {
+            $sheet.Cells.Item($rowNumber, 6).ClearContents()
+        } else {
+            $sheet.Cells.Item($rowNumber, 6).Value2 = [double]$record.estimated_value
+        }
+        $sheet.Cells.Item($rowNumber, 6).NumberFormat = '$#,##0.00'
         Set-TextCell $sheet.Cells.Item($rowNumber, 7) $record.consign_length
         Set-TextCell $sheet.Cells.Item($rowNumber, 8) $record.history_info
         $sheet.Cells.Item($rowNumber, 9).ClearContents()

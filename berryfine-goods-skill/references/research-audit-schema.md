@@ -1,5 +1,77 @@
 # Structured research audit
 
+## v2.7 adaptive marketplace pilot
+
+New and re-run intakes use `research_policy_version=2.7.0-pilot` and `scripts/adaptive_market_gate.py`. The exact research item population must match the ledger population.
+
+```json
+{
+  "research_policy_version": "2.7.0-pilot",
+  "client_id": "client-2026-001",
+  "intake_id": "intake-2026-001",
+  "items": [
+    {
+      "item_id": "BFG-20261108-0001",
+      "search_attempts": [
+        {
+          "query": "exact visible maker model",
+          "strategy": "marking exact",
+          "surface": "Integrated Web Search",
+          "search_url": "https://www.google.com/search?q=exact+visible+maker+model",
+          "opened_urls": ["https://www.etsy.com/listing/123/example"],
+          "captured_at": "2026-11-08T12:00:00-05:00"
+        }
+      ],
+      "pricing_comparables": [
+        {
+          "comp_id": "BFG-20261108-0001-c1",
+          "source_url": "https://www.etsy.com/listing/123/example",
+          "marketplace": "etsy",
+          "listing_status": "active",
+          "comparability": "exact",
+          "included": true,
+          "title": "Exact item listing",
+          "include_reason": "Same maker, model, size, and quantity.",
+          "captured_at": "2026-11-08T12:00:00-05:00",
+          "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "direct_page_verified": true,
+          "quantity": 1,
+          "normalized_unit_total_usd": 80.00
+        }
+      ],
+      "identification_assessment": {
+        "confidence": "confirmed",
+        "basis": "Visible maker and model match direct references."
+      },
+      "search_completion": {
+        "stop_tier": 8,
+        "stop_reason": "Low-value uncertainty remains at the staff boundary after eight attempts.",
+        "staff_boundary_decision": true
+      },
+      "price_synthesis": {
+        "cleaned_average": 80.00,
+        "highest_cleaned_price": 80.00,
+        "high_80": 64.00,
+        "anchor": 80.00,
+        "etsy_price": 76.00,
+        "ebay_price": 84.00
+      },
+      "pricing_confidence": "low"
+    }
+  ]
+}
+```
+
+Record exactly 6, 8, or 10 distinct attempts. The set must contain at least three strategies, image discovery, Etsy-first research, and Google or the honestly labeled approved integrated web discovery surface. Stop at six only with four stable included prices and a boundary buffer. At eight, either demonstrate stability or use the low-value staff-boundary rule. Continue to ten only for a high-value, rare, regulated, collector-significant, or materially misidentified candidate.
+
+Included pricing comparables must be direct Etsy or eBay pages, `active`, `sold`, or `completed`, exact or near, unique, normalized, and backed by a SHA-256 evidence capture. Broad matches and auction results cannot be included. A non-`REVIEW` decision requires at least three included prices; four is the target. Identification confidence is `confirmed`, `probable`, `tentative`, or `unidentified`; pricing confidence is `high`, `medium`, or `low`.
+
+The synthesis formula is reproducible: average cleaned price `A`; highest price times 0.80 `H80`; clamped anchor `B=(A+H80)/2`; Etsy `B*0.95`; eBay `B*1.05`. High confidence requires at least four prices, coefficient of variation at most 0.25, highest-to-lowest ratio at most 1.75, and at least a $5 boundary buffer.
+
+For an eight-search low-value stop, the ledger must remain `REVIEW`, the high bound must be below $125, `staff_boundary_decision` must be true, and the rationale must contain `$40-$50 STAFF DECISION` exactly.
+
+## Legacy schema v2.6
+
 Use schema version 2. Store one object per inventory item, every search attempt, and every candidate completed-sale comparable. The research gate reconciles included comparables to the canonical ledger, rejects category-comp shortcuts, and blocks `REVIEW` rows that have not exhausted a reasonable item-specific search.
 
 ```json

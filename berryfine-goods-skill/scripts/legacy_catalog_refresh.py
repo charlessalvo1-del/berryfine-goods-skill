@@ -97,9 +97,31 @@ def migrate_row(
     row["approved_at"] = ""
 
     value = decimal_value(row)
+    try:
+        range_low = float(row["market_value_low"])
+        range_high = float(row["market_value_high"])
+    except (TypeError, ValueError) as exc:
+        raise LegacyRefreshError(
+            f"{row.get('item_id')} has invalid market value range"
+        ) from exc
+    if range_high < 40:
+        required_decision = "DONATE"
+    elif range_low >= 40 and range_high < 50:
+        required_decision = "CONFIRM DONATION"
+    elif range_low >= 50:
+        required_decision = "SELL"
+    else:
+        required_decision = "REVIEW"
     migrated = False
-    if 40 <= value < 50 and row["decision"] == "DONATE":
-        row["decision"] = "CONFIRM DONATION"
+    if row["decision"] != required_decision:
+        row["decision"] = required_decision
+        row["decision_rationale"] = append_sentence(
+            row["decision_rationale"],
+            "Policy-only refresh aligned the action to the full supported value range.",
+        )
+        migrated = True
+
+    if row["decision"] == "CONFIRM DONATION":
         row["decision_rationale"] = append_sentence(
             row["decision_rationale"], CONFIRM_INSTRUCTION
         )
@@ -109,19 +131,7 @@ def migrate_row(
         row["donation_confirmation_notes"] = (
             "Policy-only legacy catalog refresh; prior completed valuation was retained."
         )
-        migrated = True
-    elif row["decision"] == "CONFIRM DONATION":
-        if not 40 <= value < 50:
-            raise LegacyRefreshError(
-                f"{row['item_id']} has CONFIRM DONATION outside the $40-$49.99 band"
-            )
-        row["decision_rationale"] = append_sentence(
-            row["decision_rationale"], CONFIRM_INSTRUCTION
-        )
-        row["donation_confirmation_status"] = "PENDING"
-        row["donation_confirmed_by"] = ""
-        row["donation_confirmed_at"] = ""
-    elif not 40 <= value < 50:
+    else:
         row["donation_confirmation_status"] = "NOT_REQUIRED"
         row["donation_confirmed_by"] = ""
         row["donation_confirmed_at"] = ""

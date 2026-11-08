@@ -323,24 +323,33 @@ def validate_row(
             )
 
     basis_value = numbers.get("decision_basis_value")
-    if row["decision"] == "SELL" and basis_value is not None and basis_value < 40:
-        if not row["decision_override_reason"]:
+    range_low = numbers.get("market_value_low")
+    range_high = numbers.get("market_value_high")
+    has_supported_range = range_low is not None and range_high is not None
+
+    if enforce_current_policy and has_supported_range:
+        if range_high < 40:
+            required_decision = "DONATE"
+        elif range_low >= 40 and range_high < 50:
+            required_decision = "CONFIRM DONATION"
+        elif range_low >= 50:
+            required_decision = "SELL"
+        else:
+            required_decision = "REVIEW"
+
+        if row["decision"] != required_decision:
             raise InventoryError(
-                f"{label} SELL below $40 requires decision_override_reason"
+                f"{label} supported range ${range_low:g}-${range_high:g} requires "
+                f"{required_decision}; got {row['decision']}"
             )
-    if row["decision"] == "DONATE" and basis_value is not None and basis_value >= 50:
-        raise InventoryError(
-            f"{label} DONATE is invalid when decision_basis_value is $50 or more"
-        )
-    if enforce_current_policy and basis_value is not None and 40 <= basis_value < 50:
-        confirmation_status = row["donation_confirmation_status"]
-        if row["decision"] == "CONFIRM DONATION":
+
+        if required_decision == "CONFIRM DONATION":
             if NON_SELL_CONFIRMATION not in row["decision_rationale"].casefold():
                 raise InventoryError(
                     f"{label} CONFIRM DONATION must state: "
                     "Confirm this item will not be sold before donation or rehoming."
                 )
-            if confirmation_status != "PENDING":
+            if row["donation_confirmation_status"] != "PENDING":
                 raise InventoryError(
                     f"{label} CONFIRM DONATION requires donation_confirmation_status PENDING"
                 )
@@ -352,48 +361,29 @@ def validate_row(
                 raise InventoryError(
                     f"{label} CONFIRM DONATION must remain DRAFT and PENDING"
                 )
-        elif row["decision"] == "DONATE":
-            require_donation_resolution(row, label, expected="CONFIRMED")
-            if row["listing_status"] != "DO_NOT_LIST":
-                raise InventoryError(
-                    f"{label} confirmed donation requires listing_status DO_NOT_LIST"
-                )
-        elif row["decision"] == "SELL":
-            require_donation_resolution(row, label, expected="DECLINED")
-            if not row["decision_override_reason"]:
-                raise InventoryError(
-                    f"{label} SELL in the $40-through-$49.99 band requires decision_override_reason"
-                )
-        elif row["decision"] == "REVIEW":
-            uncertainty_is_documented = (
-                row["identification_confidence"] in {"tentative", "unidentified"}
-                or row["valuation_confidence"] == "low"
-                or row["valuation_basis"] == "insufficient_evidence"
-                or row["safety_status"] != "CLEAR"
-                or bool(row["missing_evidence"] or row["policy_flags"])
-            )
-            if not uncertainty_is_documented:
-                raise InventoryError(
-                    f"{label} supported $40-through-$49.99 value requires CONFIRM DONATION; "
-                    "use REVIEW only for documented independent uncertainty"
-                )
-        else:
+        elif row["donation_confirmation_status"] not in {"", "NOT_REQUIRED"}:
             raise InventoryError(
-                f"{label} $40-through-$49.99 item requires CONFIRM DONATION until BFG resolves it"
+                f"{label} donation confirmation state is only valid when the entire "
+                "supported range is $40 through $49.99"
+            )
+        elif row["donation_confirmed_by"] or row["donation_confirmed_at"]:
+            raise InventoryError(
+                f"{label} donation confirmer metadata is only valid when the entire "
+                "supported range is $40 through $49.99"
             )
     elif enforce_current_policy and row["decision"] == "CONFIRM DONATION":
         raise InventoryError(
-            f"{label} CONFIRM DONATION is only valid from $40 through $49.99"
+            f"{label} CONFIRM DONATION requires an entire supported range from $40 through $49.99"
         )
-
-    if enforce_current_policy and not (basis_value is not None and 40 <= basis_value < 50):
-        if row["donation_confirmation_status"] not in {"", "NOT_REQUIRED"}:
+    elif not enforce_current_policy:
+        if row["decision"] == "SELL" and basis_value is not None and basis_value < 40:
+            if not row["decision_override_reason"]:
+                raise InventoryError(
+                    f"{label} SELL below $40 requires decision_override_reason"
+                )
+        if row["decision"] == "DONATE" and basis_value is not None and basis_value >= 50:
             raise InventoryError(
-                f"{label} donation confirmation state is only valid in the $40-through-$49.99 band"
-            )
-        if row["donation_confirmed_by"] or row["donation_confirmed_at"]:
-            raise InventoryError(
-                f"{label} donation confirmer metadata is only valid in the $40-through-$49.99 band"
+                f"{label} DONATE is invalid when decision_basis_value is $50 or more"
             )
 
     if row["testing_status"] == "PLANNED":

@@ -10,7 +10,7 @@ SKILL = ROOT / "berryfine-goods-skill"
 class ReleaseContractTests(unittest.TestCase):
     def test_reliability_release_resources_are_routed_from_skill(self) -> None:
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8-sig")
-        for name in ("photo_quality_gate.py", "review_provenance_gate.py", "apply_grouping.py", "research_gate.py", "legacy_catalog_refresh.py", "categorized_inventory_gate.py", "catalog_payload.py", "catalog_builder.ps1", "bfg.py", "audit_seal.py", "outcome_ledger.py"):
+        for name in ("photo_quality_gate.py", "review_provenance_gate.py", "apply_grouping.py", "research_gate.py", "adaptive_market_gate.py", "legacy_catalog_refresh.py", "categorized_inventory_gate.py", "catalog_payload.py", "catalog_builder.ps1", "bfg.py", "audit_seal.py", "outcome_ledger.py"):
             self.assertIn(name, text)
             self.assertTrue((SKILL / "scripts" / name).is_file())
 
@@ -18,13 +18,32 @@ class ReleaseContractTests(unittest.TestCase):
         new_scripts = {path.name for path in (SKILL / "scripts").iterdir()}
         self.assertFalse({"warehouse.py", "movement.py", "container_tracking.py"} & new_scripts)
 
-    def test_version_is_two_point_six_zero(self) -> None:
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.6.0")
+    def test_version_is_two_point_seven_zero(self) -> None:
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.7.0")
+
+    def test_v2_7_adaptive_market_policy_is_documented(self) -> None:
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8-sig")
+        for required in (
+            "adaptive `6 / 8 / 10` search ladder",
+            "$40-$50 STAFF DECISION",
+            "Auction data is identification-only",
+            "recommended Etsy price = `B * 0.95`",
+            "recommended eBay price = `B * 1.05`",
+            "scripts/adaptive_market_gate.py",
+        ):
+            self.assertIn(required, text)
 
     def test_catalog_builder_keeps_new_rows_out_of_conditional_formatting(self) -> None:
         text = (SKILL / "scripts" / "catalog_builder.ps1").read_text(encoding="utf-8-sig")
         self.assertIn('FormatConditions.Delete()', text)
         self.assertIn("$target.Interior.Color = $yellow", text)
+
+    def test_catalog_builder_preserves_blank_values_and_utf8(self) -> None:
+        text = (SKILL / "scripts" / "catalog_builder.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("Get-Content -Raw -Encoding UTF8", text)
+        self.assertIn("$cell.ClearContents()", text)
+        self.assertIn("$sheet.Cells.Item($rowNumber, 6).ClearContents()", text)
+        self.assertNotIn("$excel.CutCopyMode = 0", text)
 
     def test_ci_actions_are_immutable_sha_pins(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
