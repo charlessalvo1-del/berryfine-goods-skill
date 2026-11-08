@@ -18,8 +18,13 @@ class ReleaseContractTests(unittest.TestCase):
         new_scripts = {path.name for path in (SKILL / "scripts").iterdir()}
         self.assertFalse({"warehouse.py", "movement.py", "container_tracking.py"} & new_scripts)
 
-    def test_version_is_two_point_five_zero(self) -> None:
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.5.0")
+    def test_version_is_two_point_six_zero(self) -> None:
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.6.0")
+
+    def test_catalog_builder_keeps_new_rows_out_of_conditional_formatting(self) -> None:
+        text = (SKILL / "scripts" / "catalog_builder.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn('FormatConditions.Delete()', text)
+        self.assertIn("$target.Interior.Color = $yellow", text)
 
     def test_ci_actions_are_immutable_sha_pins(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")

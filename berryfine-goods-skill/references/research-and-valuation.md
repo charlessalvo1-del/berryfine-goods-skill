@@ -54,10 +54,24 @@ For each candidate comp, capture:
 - condition and completeness
 - match differences
 - include/exclude decision
+- evidence method and SHA-256 of the screenshot, HAR, WACZ, or equivalent capture
+- explicit confirmation that the sold price and sale date were visible in the captured evidence
+- lot quantity and any per-unit allocation
+- original currency plus dated exchange-rate source when conversion is required
 
 Write these fields as one structured comparable object using [research-audit-schema.md](research-audit-schema.md). Run `research_gate.py` before catalog generation. A narrative list of URLs does not substitute for structured evidence or exact ledger reconciliation.
 
 Do not claim a price is completed merely because a search result says "sold" without opening enough evidence to verify the transaction state.
+
+Use eBay Product Research as the preferred eBay sold source because it exposes accepted Best Offer prices and a longer history than ordinary sold search. Use Google web/image search, Lens-style discovery, and active marketplace listings to identify candidates and improve vocabulary, but never treat an active listing as sold-price evidence. Do not scrape restricted sold-data interfaces; use a human-authenticated research session and capture the visible evidence.
+
+Treat four distinct searches as a minimum, not an automatic stopping point. Continue until completed-sale depth is sufficient, two successive materially different queries add no new credible candidate, or access/evidence is explicitly blocked. Record `search_completion.status` as `evidence_sufficient`, `saturated`, or `blocked` with an item-specific stop reason.
+
+## Standard saleable condition assumption
+
+Unless positive photographic or owner-supplied evidence shows otherwise, value the subject as complete, functional, suitable for sale, and in typical good used condition. Missing close-ups or physical inspection do not justify damaged, parts-only, poor, fair, incomplete, or unsuitable-for-sale assumptions and do not independently cause `REVIEW`.
+
+Record the default as `condition_basis=assumed_standard_saleable`, `condition_grade=good`, and `Assumed complete, functional, saleable, and in typical good used condition; not physically inspected.` Use normal saleable-condition comps and exclude damaged, repair, incomplete, parts-only, or unusually poor-condition transactions. Visible defects may override the default; identify the evidence and the adjustment. Safety, legality, authenticity, recall, and marketplace-policy uncertainty remain separate review grounds.
 
 ## Comparability
 
@@ -84,7 +98,7 @@ Require three unique, directly opened completed transactions before any non-`REV
 - set `local_price` for local demand, pickup convenience, and avoided shipping/fees
 - set `quick_sale_price` below the central estimate, normally near the low end
 
-Adjust for condition, completeness, testing, authenticity confidence, seasonality, shipping difficulty, and lot size. State material adjustments.
+Adjust for positively evidenced condition differences, completeness, testing, authenticity confidence, seasonality, shipping difficulty, and lot size. Do not discount for hypothetical damage or missing condition detail. State material adjustments.
 
 Record a `price_synthesis` object containing `method=median`, every included comp ID, the raw median, the adjusted midpoint, and the adjustment reason. The adjusted midpoint must match both the ledger midpoint and decision-basis value. If a non-USD sale is included, normalize it to USD with a dated exchange-rate note before synthesis.
 

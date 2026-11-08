@@ -187,13 +187,21 @@ Use these confidence levels:
 
 Record `identification_basis`, `visible_markings`, and `missing_evidence`. Request close-ups when they can materially change value. Do not invent text hidden by blur, glare, cropping, or resolution.
 
+Use the standing BFG condition assumption for valuation: unless positive photographic or owner-supplied evidence shows otherwise, treat the item as complete, functional, suitable for sale, and in typical good used condition. Record `condition_basis=assumed_standard_saleable`, `condition_grade=good`, and state that physical inspection was not performed. Missing condition detail alone must not cause `REVIEW`, a low-grade classification, or a damage discount. Use `observed` or `owner_reported` only when positive evidence supports a different condition. Keep safety, legality, authenticity, recall, and marketplace-policy uncertainty separate from condition grade.
+
 ## Research completed sales
 
 Research sold or completed transactions, not active asking prices. Follow [references/research-and-valuation.md](references/research-and-valuation.md).
 
 Search using the most discriminating confirmed attributes first. Use general web and image search to identify unmarked or visually distinctive goods, then search marketplace sold filters and auction archives for valuation. Prefer three to eight recent, comparable sales when available. Capture source URL, marketplace, sale date, sold price, shipping, condition, and comparability notes for every comp.
 
+Use eBay Product Research as the preferred eBay completed-sale source when available because ordinary sold pages may not expose an accepted Best Offer price. Use active listings and image-search results for identification vocabulary only, never as sold-price evidence. Do not scrape a restricted sold-data interface; capture visible evidence from an authorized human research session.
+
 For every item, record at least four distinct item-specific queries using at least three strategies, including Google web or image discovery, image search, and marketplace-sold or auction research. Store the reproducible search URL, returned URLs, and URLs actually opened. Query text alone is not research evidence. Open at least four unique direct result pages; reopening one page through different queries counts once. Search-result pages, category pages, pricing indexes, and storefront indexes do not count as opened item evidence. A nonzero result count requires opened evidence, and an item whose searches all claim zero results blocks the batch for search-access or query correction. Record the closest candidates, rejection reasons, and next evidence required. `REVIEW` is not permission to skip research.
+
+Four searches are a minimum rather than a stopping rule. Continue until the evidence requirement is satisfied, two successive materially different queries add no new credible candidate, or access is explicitly blocked. Record an item-specific `search_completion` status and stop reason. Record a result count only when the interface displayed or returned that count; otherwise store it as unavailable rather than inventing a number.
+
+For every included completed transaction, capture evidence method, a SHA-256 digest of the screenshot/HAR/WACZ or equivalent record, explicit price and sale-date verification, quantity and lot-allocation treatment, and normalization provenance. Reject catalog, category, search, storefront, or auction-index pages as included comparables. Foreign-currency transactions require the original currency plus the exchange rate, rate date, and rate source.
 
 A non-`REVIEW` disposition requires at least three unique completed-sale transactions, all opened directly and at least three rated exact or near. Use five completed transactions when the supported range touches $30 through $65. Synthesize the central price with the median of the included normalized totals, not a simple average, and document any condition or completeness adjustment. If every included transaction is not normalized to USD, or fewer than the required transactions can be defended, use `REVIEW` rather than force a price.
 
@@ -215,7 +223,7 @@ If completed-sale evidence is unavailable, say so and use a clearly labeled fall
 
 ## Value and decide
 
-Normalize comps to the same currency and note whether shipping is included. Compare like-for-like condition and completeness.
+Normalize comps to the same currency and note whether shipping is included. Compare like-for-like condition and completeness using normal saleable-condition transactions. Exclude damaged, repair, incomplete, parts-only, or unusually poor-condition sales unless positive evidence shows that the subject shares that condition.
 
 Produce:
 

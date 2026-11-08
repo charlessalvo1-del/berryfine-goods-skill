@@ -31,6 +31,13 @@ def comp(item_id, number, price, url=None, currency="USD"):
         "comparability": "near",
         "included": True,
         "include_reason": "Same maker, form, material, and similar condition",
+        "evidence_method": "direct_transaction_page",
+        "evidence_sha256": f"{number:064x}",
+        "price_verified": True,
+        "sale_date_verified": True,
+        "quantity": 1,
+        "lot_allocation_note": "Single-item transaction; no allocation required.",
+        "normalization_note": "USD sale; displayed sold price plus displayed shipping.",
         "captured_at": STAMP,
     }
 
@@ -45,10 +52,10 @@ def comp_set(item_id, prices=(70, 80, 90), shared_url=None):
 def attempts(item_id, sold_urls=None):
     sold_urls = sold_urls or [f"https://example.com/rejected/{item_id}-sold-candidate"]
     return [
-        {"attempt_id": f"{item_id}-a1", "query": "Fiesta Copco teapot maker mark", "strategy": "marking_exact", "surface": "Google web search", "search_url": "https://www.google.com/search?q=Fiesta+Copco+teapot+mark", "result_count": 1, "result_urls": [f"https://example.com/reference/{item_id}"], "opened_urls": [f"https://example.com/reference/{item_id}"], "outcome": "candidate_found", "captured_at": STAMP},
-        {"attempt_id": f"{item_id}-a2", "query": "orange metal teapot ring handle image", "strategy": "image_search", "surface": "Google Images", "search_url": "https://www.google.com/search?tbm=isch&q=orange+metal+teapot", "result_count": 1, "result_urls": [f"https://example.com/image/{item_id}"], "opened_urls": [f"https://example.com/image/{item_id}"], "outcome": "candidate_found", "captured_at": STAMP},
-        {"attempt_id": f"{item_id}-a3", "query": "Fiesta Copco teapot construction confirmation", "strategy": "candidate_confirmation", "surface": "Google web search", "search_url": "https://www.google.com/search?q=Fiesta+Copco+construction", "result_count": 1, "result_urls": [f"https://example.com/confirm/{item_id}"], "opened_urls": [f"https://example.com/confirm/{item_id}"], "outcome": "candidate_found", "captured_at": STAMP},
-        {"attempt_id": f"{item_id}-a4", "query": "Fiesta Copco teapot sold completed", "strategy": "marketplace_sold", "surface": "Google completed-sale and auction search", "search_url": "https://www.google.com/search?q=Fiesta+Copco+teapot+sold", "result_count": len(sold_urls), "result_urls": sold_urls, "opened_urls": sold_urls, "outcome": "comp_found", "captured_at": STAMP},
+        {"attempt_id": f"{item_id}-a1", "query": "Fiesta Copco teapot maker mark", "strategy": "marking_exact", "surface": "Google web search", "search_url": "https://www.google.com/search?q=Fiesta+Copco+teapot+mark", "result_count": 1, "result_count_basis": "observed", "result_urls": [f"https://example.com/reference/{item_id}"], "opened_urls": [f"https://example.com/reference/{item_id}"], "outcome": "candidate_found", "captured_at": STAMP},
+        {"attempt_id": f"{item_id}-a2", "query": "orange metal teapot ring handle image", "strategy": "image_search", "surface": "Google Images", "search_url": "https://www.google.com/search?tbm=isch&q=orange+metal+teapot", "result_count": 1, "result_count_basis": "observed", "result_urls": [f"https://example.com/image/{item_id}"], "opened_urls": [f"https://example.com/image/{item_id}"], "outcome": "candidate_found", "captured_at": STAMP},
+        {"attempt_id": f"{item_id}-a3", "query": "Fiesta Copco teapot construction confirmation", "strategy": "candidate_confirmation", "surface": "Google web search", "search_url": "https://www.google.com/search?q=Fiesta+Copco+construction", "result_count": 1, "result_count_basis": "observed", "result_urls": [f"https://example.com/confirm/{item_id}"], "opened_urls": [f"https://example.com/confirm/{item_id}"], "outcome": "candidate_found", "captured_at": STAMP},
+        {"attempt_id": f"{item_id}-a4", "query": "Fiesta Copco teapot sold completed", "strategy": "marketplace_sold", "surface": "Google completed-sale and auction search", "search_url": "https://www.google.com/search?q=Fiesta+Copco+teapot+sold", "result_count": len(sold_urls), "result_count_basis": "observed", "result_urls": sold_urls, "opened_urls": sold_urls, "outcome": "comp_found", "captured_at": STAMP},
     ]
 
 
@@ -81,6 +88,7 @@ def research_item(item_id, comps=(), exhaustion=None, price_synthesis=None, sear
         "item_id": item_id,
         "search_attempts": search_attempts if search_attempts is not None else attempts(item_id, [comp["source_url"] for comp in comps] or None),
         "comparables": list(comps),
+        "search_completion": {"status": "evidence_sufficient" if len(comps) >= 3 else "saturated", "stop_reason": f"Item-specific research completed for {item_id}."},
     }
     if exhaustion is not None:
         value["exhaustion"] = exhaustion

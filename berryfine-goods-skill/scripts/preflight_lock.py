@@ -39,6 +39,12 @@ CATALOG_RULES = {
     "legacy_refresh_preserves_completed_research": True,
     "legacy_refresh_listing_authorized": False,
     "legacy_refresh_requires_categorized_delivery": True,
+    "condition_assumption": "complete, functional, saleable, and typical good used condition unless positive evidence shows otherwise",
+    "missing_condition_detail_requires_review": False,
+    "planned_testing_valuation_basis": "tested_working",
+    "research_stop_rule": "minimum four searches, then continue until evidence sufficient, saturated, or blocked",
+    "pricing_primary_source": "completed transactions; eBay Product Research preferred for eBay accepted-offer prices",
+    "active_listing_use": "identification and vocabulary only; never sold-price evidence",
 }
 CONFIRMATION_TEXT = "I confirm the selected inputs, exclusions, and catalog rules."
 WORKFLOWS = {"full-intake", "legacy-catalog-refresh"}

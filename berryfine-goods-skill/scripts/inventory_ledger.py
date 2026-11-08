@@ -36,6 +36,7 @@ FIELDS = [
     "visible_markings",
     "missing_evidence",
     "condition_grade",
+    "condition_basis",
     "condition_notes",
     "testing_status",
     "value_if_tested_working",
@@ -117,6 +118,7 @@ ENUMS = {
         "parts",
         "unknown",
     },
+    "condition_basis": {"", "assumed_standard_saleable", "observed", "owner_reported"},
     "decision": {"SELL", "DONATE", "REVIEW", "CONFIRM DONATION"},
     "donation_confirmation_status": {
         "",
@@ -173,6 +175,7 @@ FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 READY_VALUATION_BASES = {"sold_comparables", "auction_results", "expert_reference"}
 NON_SELL_CONFIRMATION = "confirm this item will not be sold"
 NEW_OPTIONAL_FIELDS = {
+    "condition_basis",
     "testing_status",
     "value_if_tested_working",
     "value_if_untested",

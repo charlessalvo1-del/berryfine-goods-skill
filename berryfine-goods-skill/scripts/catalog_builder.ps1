@@ -158,6 +158,12 @@ try {
         if ($record.recommended_action -in @('DONATE','REVIEW','CONFIRM DONATION')) { $target.Interior.Pattern = $xlSolid; $target.Interior.Color = $yellow }
     }
 
+    # Excel can silently expand a template rule when row formats are copied.
+    # Remove conditional formatting only from the blank/new-row region. Excel
+    # trims any overlapping AppliesTo range while preserving historical rules.
+    $conditionalFormatLastRow = [Math]::Max($formattedLastRow, $finalRow)
+    $sheet.Range("A$firstNewRow`:J$conditionalFormatLastRow").FormatConditions.Delete()
+
     # Extend summary formulas above the header when they end at the old retained row.
     for ($row = 1; $row -lt $headerRow; $row++) {
         for ($col = 1; $col -le 10; $col++) {

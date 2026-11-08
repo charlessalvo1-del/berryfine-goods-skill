@@ -10,6 +10,11 @@ BULK_GUIDE = (
 
 
 class SkillContractTests(unittest.TestCase):
+    def test_standard_saleable_condition_assumption_is_documented(self) -> None:
+        text = SKILL.read_text(encoding="utf-8-sig")
+        self.assertIn("condition_basis=assumed_standard_saleable", text)
+        self.assertIn("Missing condition detail alone must not cause `REVIEW`", text)
+
     def setUp(self) -> None:
         self.skill_text = SKILL.read_text(encoding="utf-8")
         self.guide_text = BULK_GUIDE.read_text(encoding="utf-8")

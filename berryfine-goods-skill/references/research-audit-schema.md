@@ -36,6 +36,7 @@ Use schema version 2. Store one object per inventory item, every search attempt,
           "surface": "Google web search",
           "search_url": "https://www.google.com/search?q=orange+enamel+metal+teapot+ring+handle",
           "result_count": 18,
+          "result_count_basis": "observed",
           "result_urls": ["https://example.com/reference"],
           "opened_urls": ["https://example.com/reference"],
           "outcome": "candidate_found",
@@ -48,6 +49,7 @@ Use schema version 2. Store one object per inventory item, every search attempt,
           "surface": "Google Images",
           "search_url": "https://www.google.com/search?tbm=isch&q=orange+enamel+metal+teapot",
           "result_count": 8,
+          "result_count_basis": "observed",
           "result_urls": ["https://example.com/image-reference"],
           "opened_urls": ["https://example.com/image-reference"],
           "outcome": "candidate_found",
@@ -60,6 +62,7 @@ Use schema version 2. Store one object per inventory item, every search attempt,
           "surface": "Google web search",
           "search_url": "https://www.google.com/search?q=Fiesta+Copco+persimmon+construction",
           "result_count": 4,
+          "result_count_basis": "observed",
           "result_urls": ["https://example.com/confirmation-reference"],
           "opened_urls": ["https://example.com/confirmation-reference"],
           "outcome": "candidate_found",
@@ -72,6 +75,7 @@ Use schema version 2. Store one object per inventory item, every search attempt,
           "surface": "Google completed-sale and auction search",
           "search_url": "https://www.google.com/search?q=Fiesta+Copco+persimmon+teapot+sold",
           "result_count": 3,
+          "result_count_basis": "observed",
           "result_urls": ["https://example.com/completed-sale", "https://example.com/completed-sale-2", "https://example.com/completed-sale-3"],
           "opened_urls": ["https://example.com/completed-sale", "https://example.com/completed-sale-2", "https://example.com/completed-sale-3"],
           "outcome": "comp_found",
@@ -103,6 +107,12 @@ Use schema version 2. Store one object per inventory item, every search attempt,
           "comparability": "near",
           "included": true,
           "include_reason": "Same model and similar condition",
+          "evidence_method": "direct_transaction_page",
+          "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "price_verified": true,
+          "sale_date_verified": true,
+          "quantity": 1,
+          "lot_allocation_note": "Single-item transaction; no allocation required.",
           "captured_at": "2026-08-02T14:00:00-04:00"
         },
         {
@@ -121,6 +131,12 @@ Use schema version 2. Store one object per inventory item, every search attempt,
           "comparability": "near",
           "included": true,
           "include_reason": "Same model and comparable wear",
+          "evidence_method": "direct_transaction_page",
+          "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "price_verified": true,
+          "sale_date_verified": true,
+          "quantity": 1,
+          "lot_allocation_note": "Single-item transaction; no allocation required.",
           "captured_at": "2026-08-02T14:02:00-04:00"
         },
         {
@@ -139,6 +155,12 @@ Use schema version 2. Store one object per inventory item, every search attempt,
           "comparability": "exact",
           "included": true,
           "include_reason": "Exact model with similar completeness",
+          "evidence_method": "direct_transaction_page",
+          "evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "price_verified": true,
+          "sale_date_verified": true,
+          "quantity": 1,
+          "lot_allocation_note": "Single-item transaction; no allocation required.",
           "captured_at": "2026-08-02T14:04:00-04:00"
         }
       ],
@@ -148,6 +170,10 @@ Use schema version 2. Store one object per inventory item, every search attempt,
         "raw_median": 82,
         "adjusted_mid": 70,
         "adjustment_reason": "Subject has more visible wear than the median-condition comparable."
+      },
+      "search_completion": {
+        "status": "evidence_sufficient",
+        "stop_reason": "Five exact or near completed transactions support the full disposition range."
       }
     }
   ]
@@ -170,7 +196,9 @@ Each item must have at least four distinct, item-specific search attempts using 
 
 Allowed outcomes are `candidate_found`, `comp_found`, `no_useful_result`, `rejected_mismatch`, and `blocked`.
 
-Every attempt must store a reproducible `search_url`, the returned `result_urls`, and the subset actually opened in `opened_urls`. A nonzero result count requires at least one opened result. `candidate_found` and `comp_found` require opened evidence. An item for which all attempts claim zero results is a blocker rather than acceptable research exhaustion; diagnose search access or revise the queries.
+Every attempt must store a reproducible `search_url`, the returned `result_urls`, and the subset actually opened in `opened_urls`. Set `result_count_basis=observed` only when the surface displayed or returned the count. When it did not, use `result_count_basis=not_displayed` and `result_count=null`; never manufacture a count. A nonzero observed result count requires at least one opened result. `candidate_found` and `comp_found` require opened evidence. An item for which all observed attempts claim zero results is a blocker rather than acceptable research exhaustion; diagnose search access or revise the queries.
+
+Every item also requires `search_completion` with status `evidence_sufficient`, `saturated`, or `blocked` and an item-specific `stop_reason`. Four queries are the minimum coverage requirement, not an automatic stop condition.
 
 For a visually distinctive or unmarked item, use image search as an identification lead. Search results and active listings may establish vocabulary, candidate maker/model, and distinctive construction, but only completed transactions may be included as sold comparables.
 
@@ -190,7 +218,7 @@ Allowed `reason_code` values are `no_candidates`, `no_completed_sales`, `conflic
 
 Do not reuse one sold URL as support for more than three different inventory items. At least one included comparable for a non-`REVIEW` disposition must be `exact` or `near`; broad category comps alone cannot authorize sale or disposal.
 
-For a non-`REVIEW` disposition, include at least three unique completed-sale URLs and require at least three exact or near matches. Require five unique completed transactions when the supported value range touches $30 through $65. Every included comparable must be represented in direct opened evidence. Synthesize price with a `price_synthesis` object using the median of the included USD-normalized totals. The recorded median must be reproducible, and the adjusted midpoint must match the ledger midpoint and decision-basis value.
+For a non-`REVIEW` disposition, include at least three unique completed-sale URLs and require at least three exact or near matches. Require five unique completed transactions when the supported value range touches $30 through $65. Every included comparable must be represented in direct opened evidence and include `evidence_method`, `evidence_sha256`, verified price/date flags, quantity, lot-allocation treatment, and normalization provenance. Foreign currency also requires `exchange_rate`, `exchange_rate_date`, and `exchange_rate_source`. Synthesize price with a `price_synthesis` object using the median of the included USD-normalized totals. The recorded median must be reproducible, and the adjusted midpoint must match the ledger midpoint and decision-basis value.
 
 ## Independent challenge review
 

@@ -30,7 +30,7 @@ REQUIRED_RECORDS = {
     "catalog_verification": "catalog-verification.json",
 }
 ALLOWED_DECISIONS = ("SELL", "DONATE", "CONFIRM DONATION", "REVIEW")
-REQUIRED_RESEARCH_POLICY_VERSION = "2.5.0"
+REQUIRED_RESEARCH_POLICY_VERSION = "2.6.0"
 
 
 def read_json(path: Path) -> dict[str, Any]:

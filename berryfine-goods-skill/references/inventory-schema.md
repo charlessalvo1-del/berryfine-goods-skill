@@ -38,6 +38,7 @@ Top-level client and intake values fill missing item values. Item-level values t
 | `visible_markings` | optional | Transcribed labels, marks, and codes |
 | `missing_evidence` | optional | Photos, tests, or documentation still needed |
 | `condition_grade` | required | `new`, `excellent`, `good`, `fair`, `poor`, `parts`, or `unknown` |
+| `condition_basis` | required for new/reappraised rows | `assumed_standard_saleable`, `observed`, or `owner_reported` |
 | `condition_notes` | required | Specific wear, damage, function, and completeness |
 | `testing_status` | optional | `NOT_REQUIRED`, `PLANNED`, `PASSED`, or `FAILED` |
 | `value_if_tested_working` | conditional | Supported value if tested and working; required when testing is planned |
@@ -93,6 +94,8 @@ Top-level client and intake values fill missing item values. Item-level values t
 - Resolve the band to `DONATE` only with status `CONFIRMED`, `donation_confirmed_by`, a valid ISO `donation_confirmed_at`, and `listing_status=DO_NOT_LIST`. Resolve it to `SELL` only with status `DECLINED`, the same human record, and an explicit `decision_override_reason`.
 - Keep the $50 sell threshold separate from the $125 auction-candidate routing rule.
 - Do not use `REVIEW` solely because `testing_status` is `PLANNED`.
+- For new or reappraised items, default `condition_basis` to `assumed_standard_saleable`, `condition_grade` to `good`, and state `Assumed complete, functional, saleable, and in typical good used condition; not physically inspected.` Missing condition detail alone does not justify `REVIEW` or a low-grade adjustment.
+- Use `observed` or `owner_reported` only when positive evidence supports a different condition. Never infer `fair`, `poor`, `parts`, damaged, incomplete, or unsuitable-for-sale status from missing photographs.
 - For planned testing, use `value_if_tested_working` as `decision_basis_value`, describe the untested value and difference in `testing_notes`, and keep `listing_status` `DRAFT`.
 
 ## Suggested item IDs

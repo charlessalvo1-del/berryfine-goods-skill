@@ -27,10 +27,12 @@ REQUIRED_COMP_FIELDS = {
     "comp_id", "title", "marketplace", "source_url", "transaction_status",
     "sale_date", "sold_price", "shipping", "currency", "condition",
     "comparability", "included", "include_reason", "captured_at",
+    "evidence_method", "evidence_sha256", "price_verified", "sale_date_verified",
+    "quantity", "lot_allocation_note", "normalization_note",
 }
 REQUIRED_ATTEMPT_FIELDS = {
     "attempt_id", "query", "strategy", "surface", "search_url", "result_count",
-    "result_urls", "opened_urls", "outcome", "captured_at",
+    "result_urls", "opened_urls", "outcome", "captured_at", "result_count_basis",
 }
 REQUIRED_EXHAUSTION_FIELDS = {
     "reason_code", "summary", "next_evidence", "closest_candidate_urls",
@@ -69,7 +71,11 @@ MIN_SEARCH_STRATEGIES = 3
 MIN_DIRECT_OPENED_PAGES = 4
 MIN_COMPLETED_COMPS = 3
 BORDERLINE_COMPLETED_COMPS = 5
-RESEARCH_POLICY_VERSION = "2.5.0"
+RESEARCH_POLICY_VERSION = "2.6.0"
+ALLOWED_EVIDENCE_METHODS = {
+    "direct_transaction_page", "ebay_product_research", "browser_archive",
+}
+ALLOWED_RESULT_COUNT_BASES = {"observed", "not_displayed"}
 
 
 def valid_url(value: str) -> bool:
@@ -90,7 +96,7 @@ def direct_evidence_url(value: str) -> bool:
         return path.startswith("/us/item/")
     if host == "etsy.com" or host.endswith(".etsy.com"):
         return path.startswith("/listing/")
-    if any(marker in path for marker in ("/search", "/category/", "/categories/", "/pricing/", "/collections/", "/browse/")):
+    if any(marker in path for marker in ("/search", "/category/", "/categories/", "/catalog/", "/pricing/", "/collections/", "/browse/", "/bidgallery")):
         return False
     return bool(path)
 
@@ -146,6 +152,16 @@ def validate_comp(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
     source_url = str(raw["source_url"]).strip()
     if not valid_url(source_url):
         raise ResearchError(f"{item_id}/{comp_id} has invalid source_url")
+    evidence_method = str(raw["evidence_method"]).strip().casefold()
+    if evidence_method not in ALLOWED_EVIDENCE_METHODS:
+        raise ResearchError(f"{item_id}/{comp_id} has unsupported evidence_method")
+    if evidence_method != "ebay_product_research" and not direct_evidence_url(source_url):
+        raise ResearchError(f"{item_id}/{comp_id} must use a direct transaction URL")
+    evidence_sha256 = str(raw["evidence_sha256"]).strip().casefold()
+    if not re.fullmatch(r"[0-9a-f]{64}", evidence_sha256):
+        raise ResearchError(f"{item_id}/{comp_id} evidence_sha256 must be a 64-character SHA-256 digest")
+    if raw["price_verified"] is not True or raw["sale_date_verified"] is not True:
+        raise ResearchError(f"{item_id}/{comp_id} price and sale date must be verified from captured evidence")
     try:
         date.fromisoformat(str(raw["sale_date"]))
     except ValueError as exc:
@@ -161,17 +177,33 @@ def validate_comp(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
     iso_timestamp(raw["captured_at"], f"{item_id}/{comp_id} captured_at")
     sold_price = number(raw["sold_price"], f"{item_id}/{comp_id} sold_price")
     shipping = number(raw["shipping"], f"{item_id}/{comp_id} shipping")
+    quantity = integer(raw["quantity"], f"{item_id}/{comp_id} quantity")
+    if quantity < 1:
+        raise ResearchError(f"{item_id}/{comp_id} quantity must be at least one")
+    lot_note = str(raw["lot_allocation_note"]).strip()
+    if quantity > 1 and not lot_note:
+        raise ResearchError(f"{item_id}/{comp_id} multi-item lot requires lot_allocation_note")
+    normalization_note = str(raw["normalization_note"]).strip()
+    if not normalization_note:
+        raise ResearchError(f"{item_id}/{comp_id} requires normalization_note")
     normalized_total_usd: float | None = sold_price + shipping if currency == "USD" else None
     if currency != "USD" and raw.get("normalized_total_usd") not in (None, ""):
         normalized_total_usd = number(raw["normalized_total_usd"], f"{item_id}/{comp_id} normalized_total_usd")
-        if not str(raw.get("normalization_note", "")).strip():
-            raise ResearchError(f"{item_id}/{comp_id} foreign-currency normalization requires normalization_note")
+        for field in ("exchange_rate", "exchange_rate_date", "exchange_rate_source"):
+            if raw.get(field) in (None, ""):
+                raise ResearchError(f"{item_id}/{comp_id} foreign-currency normalization requires {field}")
+        number(raw["exchange_rate"], f"{item_id}/{comp_id} exchange_rate")
+        try:
+            date.fromisoformat(str(raw["exchange_rate_date"]))
+        except ValueError as exc:
+            raise ResearchError(f"{item_id}/{comp_id} exchange_rate_date must use YYYY-MM-DD") from exc
     return {
         **raw, "comp_id": comp_id, "source_url": source_url,
         "transaction_status": status, "currency": currency,
         "comparability": comparability,
         "sold_price": sold_price, "shipping": shipping,
-        "normalized_total_usd": normalized_total_usd,
+        "normalized_total_usd": normalized_total_usd, "quantity": quantity,
+        "evidence_method": evidence_method, "evidence_sha256": evidence_sha256,
     }
 
 
@@ -197,20 +229,28 @@ def validate_attempt(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
     search_url = str(raw["search_url"]).strip()
     if not valid_url(search_url):
         raise ResearchError(f"{item_id}/{attempt_id} has invalid search_url")
-    result_count = integer(raw["result_count"], f"{item_id}/{attempt_id} result_count")
+    count_basis = str(raw["result_count_basis"]).strip().casefold()
+    if count_basis not in ALLOWED_RESULT_COUNT_BASES:
+        raise ResearchError(f"{item_id}/{attempt_id} has unsupported result_count_basis")
+    if count_basis == "observed":
+        result_count = integer(raw["result_count"], f"{item_id}/{attempt_id} result_count")
+    else:
+        if raw["result_count"] not in (None, ""):
+            raise ResearchError(f"{item_id}/{attempt_id} not_displayed result count must be null")
+        result_count = None
     result_urls = raw["result_urls"]
     opened_urls = raw["opened_urls"]
     if not isinstance(result_urls, list) or any(not valid_url(str(url)) for url in result_urls):
         raise ResearchError(f"{item_id}/{attempt_id} result_urls must be a list of HTTP(S) URLs")
     if not isinstance(opened_urls, list) or any(not valid_url(str(url)) for url in opened_urls):
         raise ResearchError(f"{item_id}/{attempt_id} opened_urls must be a list of HTTP(S) URLs")
-    if result_count < len(result_urls):
+    if result_count is not None and result_count < len(result_urls):
         raise ResearchError(f"{item_id}/{attempt_id} result_count is smaller than result_urls")
     if not set(opened_urls).issubset(set(result_urls)):
         raise ResearchError(f"{item_id}/{attempt_id} opened_urls must also appear in result_urls")
     if result_count == 0 and (result_urls or opened_urls):
         raise ResearchError(f"{item_id}/{attempt_id} zero results cannot include result URLs")
-    if result_count > 0 and not opened_urls:
+    if result_count is not None and result_count > 0 and not opened_urls:
         raise ResearchError(f"{item_id}/{attempt_id} must open at least one returned result")
     outcome = str(raw["outcome"]).strip().casefold()
     if outcome not in ALLOWED_OUTCOMES:
@@ -222,6 +262,7 @@ def validate_attempt(raw: Any, item_id: str, seen: set[str]) -> dict[str, Any]:
         "surface": surface, "search_url": search_url, "result_urls": result_urls,
         "opened_urls": opened_urls, "outcome": outcome, "result_count": result_count,
         "captured_at": iso_timestamp(raw["captured_at"], f"{item_id}/{attempt_id} captured_at"),
+        "result_count_basis": count_basis,
     }
 
 
@@ -433,13 +474,19 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
                 blockers, item_id, "SHALLOW_RESEARCH",
                 "Every item requires at least four unique direct opened pages, including image-search evidence and completed-sale or auction evidence.",
             )
-        if sum(attempt["result_count"] for attempt in attempts) == 0:
+        observed_counts = [attempt["result_count"] for attempt in attempts if attempt["result_count"] is not None]
+        if observed_counts and sum(observed_counts) == 0:
             add_blocker(blockers, item_id, "NO_SEARCH_RESULTS", "All recorded searches returned zero results; research cannot be authorized without opened web evidence or a documented access failure.")
         name_tokens = discriminating_tokens(ledger[item_id].get("identified_name", ""))
         if name_tokens and not any(name_tokens & set(query.split()) for query in queries):
             add_blocker(blockers, item_id, "NON_SPECIFIC_SEARCH", "No recorded query contains a discriminating token from the identified item name.")
 
         row = ledger[item_id]
+        condition_basis = normalize_query(row.get("condition_basis") or "assumed_standard_saleable")
+        if condition_basis not in {"assumed_standard_saleable", "observed", "owner_reported"}:
+            add_blocker(blockers, item_id, "INVALID_CONDITION_BASIS", "condition_basis must be assumed_standard_saleable, observed, or owner_reported.")
+        if condition_basis == "assumed_standard_saleable" and row.get("condition_grade", "good").casefold() != "good":
+            add_blocker(blockers, item_id, "INVALID_ASSUMED_CONDITION", "The standard saleable assumption must use condition_grade=good; poorer grades require positive observed or owner-reported evidence.")
         markings = normalize_query(row.get("visible_markings", ""))
         if markings in PLACEHOLDER_MARKINGS or markings.startswith("visible photographed form"):
             add_blocker(blockers, item_id, "PLACEHOLDER_VISIBLE_MARKINGS", "Visible markings must transcribe actual evidence or remain blank; boilerplate is not acceptable.")
@@ -495,6 +542,9 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
             except ResearchError as exc:
                 add_blocker(blockers, item_id, "INVALID_VALUE_RANGE", str(exc))
 
+        completion = raw_item.get("search_completion")
+        if not isinstance(completion, dict) or completion.get("status") not in {"evidence_sufficient", "saturated", "blocked"} or not str(completion.get("stop_reason", "")).strip():
+            add_blocker(blockers, item_id, "MISSING_SEARCH_COMPLETION", "Research must record evidence_sufficient, saturated, or blocked with an item-specific stop reason; four searches alone are not a stopping rule.")
         exhausted = False
         if decision == "REVIEW" and len(usable) < MIN_COMPLETED_COMPS:
             try:
