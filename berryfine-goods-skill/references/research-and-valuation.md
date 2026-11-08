@@ -103,9 +103,9 @@ If a provisional range is still useful, label it as low confidence.
 Set `valuation_basis` to `insufficient_evidence` when no defensible source
 class applies.
 
-`REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete at least four distinct query formulations across at least two surfaces, including image search and a completed-sale search. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion.
+`REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete at least four distinct query formulations across at least two surfaces, including image search and a completed-sale search. Open at least three unique direct result pages, including a result reached through image search and a direct completed-sale or auction candidate. Search pages, category indexes, and storefront pages do not count. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion, and the same exhaustion text may not be copied across unrelated items.
 
-For a batch with ten or more zero-comp items, run an independent challenge over at least ten high-searchability items before accepting the first-pass conclusions. Prioritize visible identifiers, named titles, brands, models, and distinctive forms. If the challenge finds a missed identity or valid completed sale, integrate it and continue challenging the remaining high-searchability zero-comp items until the corrections are exhausted. Preserve the challenge report and opened evidence in the structured audit.
+For a batch with ten or more zero-comp items, record the entire first-pass zero-comp population and independently challenge every item before accepting the conclusions. Prioritize visible identifiers, named titles, brands, models, and distinctive forms, then continue through the remaining population. Integrate every missed identity or valid completed sale. Preserve the full challenge population, report, direct opened evidence, correction count, and explicit expansion status in the structured audit.
 
 ## Items planned for testing
 

@@ -55,11 +55,38 @@ GENERIC_NAME_WORDS = {
     "mixed", "orange", "pair", "plastic", "red", "round", "set", "silver", "small",
     "the", "vintage", "white", "wood", "wooden", "yellow",
 }
+PLACEHOLDER_MARKINGS = {
+    "visible photographed form, decoration, materials and any legible product wording used; no hidden mark was inferred.",
+    "none visible",
+    "no visible markings",
+}
+SEARCH_HOSTS = {
+    "bing.com", "www.bing.com", "google.com", "www.google.com",
+    "images.google.com", "search.yahoo.com",
+}
 
 
 def valid_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def direct_evidence_url(value: str) -> bool:
+    """Return true only for an opened result page, not a search/category page."""
+    parsed = urlparse(value)
+    host = parsed.netloc.casefold()
+    path = parsed.path.casefold().rstrip("/")
+    if host in SEARCH_HOSTS:
+        return False
+    if host.endswith("ebay.com") or host.endswith("ebay.co.uk"):
+        return path.startswith("/itm/")
+    if host.endswith("mercari.com"):
+        return path.startswith("/us/item/")
+    if host.endswith("etsy.com"):
+        return path.startswith("/listing/")
+    if any(marker in path for marker in ("/search", "/category/", "/categories/")):
+        return False
+    return bool(path)
 
 
 def number(value: Any, label: str) -> float:
@@ -224,10 +251,14 @@ def add_blocker(entries: list[dict[str, str]], item_id: str, code: str, message:
     entries.append({"item_id": item_id, "code": code, "message": message})
 
 
-def validate_challenge(raw: Any, ledger_ids: set[str]) -> int:
+def validate_challenge(raw: Any, ledger_ids: set[str]) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ResearchError("challenge_review must be an object")
-    required = {"review_run_id", "created_at", "reviewer", "independent_context", "sampled_item_ids", "findings", "corrections_integrated"}
+    required = {
+        "review_run_id", "created_at", "reviewer", "independent_context",
+        "first_pass_zero_comp_item_ids", "sampled_item_ids", "findings",
+        "corrections_integrated", "expanded_to_all_first_pass_zero_comp",
+    }
     missing = sorted(required - set(raw))
     if missing:
         raise ResearchError(f"challenge_review is missing: {', '.join(missing)}")
@@ -239,11 +270,20 @@ def validate_challenge(raw: Any, ledger_ids: set[str]) -> int:
     if raw["corrections_integrated"] is not True:
         raise ResearchError("challenge_review corrections must be integrated before authorization")
     sampled = raw["sampled_item_ids"]
+    first_pass = raw["first_pass_zero_comp_item_ids"]
     findings = raw["findings"]
     if not isinstance(sampled, list) or len(sampled) != len(set(sampled)):
         raise ResearchError("challenge_review sampled_item_ids must be a unique list")
+    if not isinstance(first_pass, list) or not first_pass or len(first_pass) != len(set(first_pass)):
+        raise ResearchError("challenge_review first_pass_zero_comp_item_ids must be a nonempty unique list")
     if not set(sampled).issubset(ledger_ids):
         raise ResearchError("challenge_review contains an unknown sampled item ID")
+    if not set(first_pass).issubset(ledger_ids):
+        raise ResearchError("challenge_review contains an unknown first-pass zero-comp item ID")
+    if set(sampled) != set(first_pass):
+        raise ResearchError("challenge_review must sample every first-pass zero-comp item")
+    if raw["expanded_to_all_first_pass_zero_comp"] is not True:
+        raise ResearchError("challenge_review must expand to all first-pass zero-comp items")
     if not isinstance(findings, list):
         raise ResearchError("challenge_review findings must be a list")
     finding_ids: set[str] = set()
@@ -260,10 +300,19 @@ def validate_challenge(raw: Any, ledger_ids: set[str]) -> int:
             raise ResearchError(f"challenge_review/{item_id} opened_urls must contain valid HTTP(S) URLs")
         if outcome != "not_searchable" and not urls:
             raise ResearchError(f"challenge_review/{item_id} requires opened evidence")
+        if outcome != "not_searchable" and not any(direct_evidence_url(str(url)) for url in urls):
+            raise ResearchError(f"challenge_review/{item_id} requires a direct opened result page")
         finding_ids.add(item_id)
     if finding_ids != set(sampled):
         raise ResearchError("challenge_review findings must exactly match sampled_item_ids")
-    return len(sampled)
+    return {
+        "sampled": set(sampled),
+        "first_pass": set(first_pass),
+        "correction_count": sum(
+            str(finding.get("outcome", "")).strip().casefold() == "correction_found"
+            for finding in findings
+        ),
+    }
 
 
 def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, Any]:
@@ -282,6 +331,7 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
     blockers: list[dict[str, str]] = []
     included_url_items: dict[str, set[str]] = defaultdict(set)
     zero_comp_item_ids: set[str] = set()
+    exhaustion_summaries: dict[str, list[str]] = defaultdict(list)
 
     for raw_item in payload["items"]:
         if not isinstance(raw_item, dict):
@@ -300,6 +350,10 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
         queries = {attempt["query"] for attempt in attempts}
         strategies = {attempt["strategy"] for attempt in attempts}
         surfaces = {attempt["surface"].casefold() for attempt in attempts}
+        direct_opened = {
+            url for attempt in attempts for url in attempt["opened_urls"]
+            if direct_evidence_url(str(url))
+        }
         if len(queries) < 2 or len(strategies) < 2:
             add_blocker(blockers, item_id, "INSUFFICIENT_SEARCH_COVERAGE", "Every item requires at least two distinct item-specific queries using at least two strategies.")
         if sum(attempt["result_count"] for attempt in attempts) == 0:
@@ -309,6 +363,9 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
             add_blocker(blockers, item_id, "NON_SPECIFIC_SEARCH", "No recorded query contains a discriminating token from the identified item name.")
 
         row = ledger[item_id]
+        markings = normalize_query(row.get("visible_markings", ""))
+        if markings in PLACEHOLDER_MARKINGS or markings.startswith("visible photographed form"):
+            add_blocker(blockers, item_id, "PLACEHOLDER_VISIBLE_MARKINGS", "Visible markings must transcribe actual evidence or remain blank; boilerplate is not acceptable.")
         reported_count = int(float(row.get("comp_count") or 0))
         ledger_urls = {url.strip() for url in (row.get("comp_urls") or "").split(";") if url.strip()}
         usable_urls = {comp["source_url"] for comp in usable}
@@ -332,8 +389,22 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
                 add_blocker(blockers, item_id, "ZERO_COMP_DISPOSITION", "An item with no usable completed-sale comparable must remain REVIEW.")
             if len(queries) < 4 or "image_search" not in strategies or "marketplace_sold" not in strategies or len(surfaces) < 2:
                 add_blocker(blockers, item_id, "SEARCH_NOT_EXHAUSTED", "Zero-comp REVIEW requires four distinct queries, image search, marketplace sold search, and at least two surfaces.")
+            image_opened = {
+                url for attempt in attempts if attempt["strategy"] == "image_search"
+                for url in attempt["opened_urls"] if direct_evidence_url(str(url))
+            }
+            sold_opened = {
+                url for attempt in attempts if attempt["strategy"] == "marketplace_sold"
+                for url in attempt["opened_urls"] if direct_evidence_url(str(url))
+            }
+            if len(direct_opened) < 3 or not image_opened or not sold_opened:
+                add_blocker(
+                    blockers, item_id, "SHALLOW_ZERO_COMP_RESEARCH",
+                    "Zero-comp REVIEW requires at least three unique direct opened result pages, including opened image-search and completed-sale/auction evidence.",
+                )
             try:
-                validate_exhaustion(raw_item.get("exhaustion"), item_id)
+                exhaustion = validate_exhaustion(raw_item.get("exhaustion"), item_id)
+                exhaustion_summaries[normalize_query(exhaustion["summary"])].append(item_id)
                 exhausted = True
             except ResearchError as exc:
                 add_blocker(blockers, item_id, "MISSING_EXHAUSTION_RECORD", str(exc))
@@ -355,15 +426,22 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
         if len(item_ids) > 3:
             for item_id in sorted(item_ids):
                 add_blocker(blockers, item_id, "OVERUSED_COMPARABLE", f"Comparable URL is reused across {len(item_ids)} items: {url}")
+    for summary, item_ids in sorted(exhaustion_summaries.items()):
+        if summary and len(item_ids) > 3:
+            for item_id in item_ids:
+                add_blocker(blockers, item_id, "BOILERPLATE_EXHAUSTION", f"The same exhaustion summary is reused across {len(item_ids)} items; each conclusion must be item-specific.")
 
     challenge_sample_count = 0
+    challenge_correction_count = 0
     if len(zero_comp_item_ids) >= 10:
         if not isinstance(payload.get("challenge_review"), dict):
-            add_blocker(blockers, "*", "MISSING_CHALLENGE_REVIEW", "Ten or more zero-comp items require an independent challenge review of at least ten high-searchability items.")
+            add_blocker(blockers, "*", "MISSING_CHALLENGE_REVIEW", "Ten or more zero-comp items require an independent challenge of the entire first-pass zero-comp population.")
         else:
-            challenge_sample_count = validate_challenge(payload["challenge_review"], set(ledger))
-            if challenge_sample_count < 10:
-                add_blocker(blockers, "*", "INSUFFICIENT_CHALLENGE_SAMPLE", "Independent challenge review must sample at least ten items when ten or more items have zero comps.")
+            challenge = validate_challenge(payload["challenge_review"], set(ledger))
+            challenge_sample_count = len(challenge["sampled"])
+            challenge_correction_count = challenge["correction_count"]
+            if not zero_comp_item_ids.issubset(challenge["first_pass"]):
+                add_blocker(blockers, "*", "INCOMPLETE_ZERO_COMP_CHALLENGE", "Every current zero-comp item must appear in the independently challenged first-pass population.")
 
     return {
         "version": 2, "verification_mode": "current-research",
@@ -373,6 +451,7 @@ def gate(research_path: Path, ledger_path: Path, intake_id: str) -> dict[str, An
         "research_sha256": sha256_file(research_path), "ledger_sha256": sha256_file(ledger_path),
         "item_count": len(ledger), "finding_count": len(findings),
         "blocker_count": len(blockers), "challenge_sample_count": challenge_sample_count,
+        "challenge_correction_count": challenge_correction_count,
         "findings": findings, "blockers": blockers,
     }
 

@@ -24,7 +24,7 @@ def attempts(item_id, exhaustive=False):
     if exhaustive:
         values.extend([
             {"attempt_id": f"{item_id}-a3", "query": "Fiesta Copco teapot reverse image", "strategy": "image_search", "surface": "Google Images", "search_url": "https://www.google.com/search?tbm=isch&q=Fiesta+Copco+teapot", "result_count": 3, "result_urls": ["https://example.com/rejected/teapot"], "opened_urls": ["https://example.com/rejected/teapot"], "outcome": "rejected_mismatch", "captured_at": STAMP},
-            {"attempt_id": f"{item_id}-a4", "query": "Fiesta Copco teapot sold", "strategy": "marketplace_sold", "surface": "eBay sold", "search_url": "https://www.ebay.com/sch/i.html?_nkw=Fiesta+Copco+teapot&LH_Sold=1", "result_count": 0, "result_urls": [], "opened_urls": [], "outcome": "no_useful_result", "captured_at": STAMP},
+            {"attempt_id": f"{item_id}-a4", "query": "Fiesta Copco teapot sold", "strategy": "marketplace_sold", "surface": "eBay sold", "search_url": "https://www.ebay.com/sch/i.html?_nkw=Fiesta+Copco+teapot&LH_Sold=1", "result_count": 1, "result_urls": [f"https://example.com/sold/{item_id}-candidate"], "opened_urls": [f"https://example.com/sold/{item_id}-candidate"], "outcome": "rejected_mismatch", "captured_at": STAMP},
         ])
     return values
 
@@ -46,7 +46,7 @@ class ResearchGateV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=temp_root) as temp:
             root = Path(temp)
             ledger = root / "ledger.csv"
-            fields = ["intake_id", "item_id", "identified_name", "comp_count", "comp_urls", "valuation_basis", "valuation_confidence", "decision"]
+            fields = ["intake_id", "item_id", "identified_name", "visible_markings", "comp_count", "comp_urls", "valuation_basis", "valuation_confidence", "decision"]
             with ledger.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fields)
                 writer.writeheader()
@@ -86,6 +86,41 @@ class ResearchGateV2Tests(unittest.TestCase):
         result = self.run_gate([row], [item])
         self.assertIn("NO_SEARCH_RESULTS", {entry["code"] for entry in result["blockers"]})
 
+    def test_one_opened_page_does_not_establish_exhaustion(self):
+        row = {"intake_id": "test-intake", "item_id": "I1", "identified_name": "Fiesta Copco teapot", "comp_count": 0, "comp_urls": "", "valuation_basis": "insufficient_evidence", "valuation_confidence": "low", "decision": "REVIEW"}
+        shallow = attempts("I1", exhaustive=True)
+        for attempt in shallow[1:]:
+            attempt.update(result_count=0, result_urls=[], opened_urls=[], outcome="no_useful_result")
+        exhaustion = {"reason_code": "no_completed_sales", "summary": "The single opened reference identified the object but did not establish a completed sale for this Fiesta teapot.", "next_evidence": "Open image-search and completed-sale candidates.", "closest_candidate_urls": ["https://example.com/reference/fiesta"], "candidate_identifications_considered": ["Fiesta Copco teapot"]}
+        item = {"item_id": "I1", "search_attempts": shallow, "comparables": [], "exhaustion": exhaustion}
+        result = self.run_gate([row], [item])
+        self.assertIn("SHALLOW_ZERO_COMP_RESEARCH", {entry["code"] for entry in result["blockers"]})
+
+    def test_generic_ebay_category_page_does_not_count_as_sold_evidence(self):
+        row = {"intake_id": "test-intake", "item_id": "I1", "identified_name": "Fiesta Copco teapot", "comp_count": 0, "comp_urls": "", "valuation_basis": "insufficient_evidence", "valuation_confidence": "low", "decision": "REVIEW"}
+        values = attempts("I1", exhaustive=True)
+        values[-1].update(result_count=1, result_urls=["https://www.ebay.com/b/otagiri-tea-set/bn_7024844841"], opened_urls=["https://www.ebay.com/b/otagiri-tea-set/bn_7024844841"], outcome="candidate_found")
+        exhaustion = {"reason_code": "no_completed_sales", "summary": "The Otagiri category page did not establish a completed Fiesta teapot transaction.", "next_evidence": "Open a direct sold item or auction result.", "closest_candidate_urls": ["https://www.ebay.com/b/otagiri-tea-set/bn_7024844841"], "candidate_identifications_considered": ["Fiesta Copco teapot"]}
+        item = {"item_id": "I1", "search_attempts": values, "comparables": [], "exhaustion": exhaustion}
+        result = self.run_gate([row], [item])
+        self.assertIn("SHALLOW_ZERO_COMP_RESEARCH", {entry["code"] for entry in result["blockers"]})
+
+    def test_placeholder_visible_markings_fail(self):
+        row = {"intake_id": "test-intake", "item_id": "I1", "identified_name": "Fiesta Copco teapot", "visible_markings": "Visible photographed form, decoration, materials and any legible product wording used; no hidden mark was inferred.", "comp_count": 1, "comp_urls": URL, "valuation_basis": "completed_sales", "valuation_confidence": "high", "decision": "SELL"}
+        result = self.run_gate([row], [{"item_id": "I1", "search_attempts": attempts("I1"), "comparables": [comp("I1")]}])
+        self.assertIn("PLACEHOLDER_VISIBLE_MARKINGS", {entry["code"] for entry in result["blockers"]})
+
+    def test_reused_exhaustion_boilerplate_fails(self):
+        rows = []
+        items = []
+        for number in range(1, 5):
+            item_id = f"I{number}"
+            rows.append({"intake_id": "test-intake", "item_id": item_id, "identified_name": "Fiesta Copco teapot", "comp_count": 0, "comp_urls": "", "valuation_basis": "insufficient_evidence", "valuation_confidence": "low", "decision": "REVIEW"})
+            exhaustion = {"reason_code": "no_completed_sales", "summary": "Generic research produced no completed sale.", "next_evidence": f"Obtain evidence for {item_id}.", "closest_candidate_urls": [f"https://example.com/active/{item_id}"], "candidate_identifications_considered": ["Fiesta Copco teapot"]}
+            items.append({"item_id": item_id, "search_attempts": attempts(item_id, exhaustive=True), "comparables": [], "exhaustion": exhaustion})
+        result = self.run_gate(rows, items)
+        self.assertEqual(4, sum(entry["code"] == "BOILERPLATE_EXHAUSTION" for entry in result["blockers"]))
+
     def test_all_documented_exhaustion_reasons_pass(self):
         reasons = ["no_candidates", "no_completed_sales", "conflicting_identity", "inaccessible_sold_data", "insufficient_photo_detail"]
         for reason in reasons:
@@ -111,21 +146,28 @@ class ResearchGateV2Tests(unittest.TestCase):
         for number in range(1, 11):
             item_id = f"I{number}"
             rows.append({"intake_id": "test-intake", "item_id": item_id, "identified_name": "Fiesta Copco teapot", "comp_count": 0, "comp_urls": "", "valuation_basis": "insufficient_evidence", "valuation_confidence": "low", "decision": "REVIEW"})
-            exhaustion = {"reason_code": "no_completed_sales", "summary": "No verifiable completed sale found.", "next_evidence": "Obtain an accessible sold archive.", "closest_candidate_urls": ["https://example.com/active/fiesta"], "candidate_identifications_considered": ["Fiesta Copco teapot"]}
+            exhaustion = {"reason_code": "no_completed_sales", "summary": f"No verifiable completed sale found for Fiesta teapot research item {item_id}.", "next_evidence": f"Obtain an accessible sold archive for item {item_id}.", "closest_candidate_urls": ["https://example.com/active/fiesta"], "candidate_identifications_considered": ["Fiesta Copco teapot"]}
             items.append({"item_id": item_id, "search_attempts": attempts(item_id, exhaustive=True), "comparables": [], "exhaustion": exhaustion})
         missing = self.run_gate(rows, items)
         self.assertIn("MISSING_CHALLENGE_REVIEW", {entry["code"] for entry in missing["blockers"]})
         challenge = {
             "review_run_id": "challenge-1", "created_at": STAMP,
             "reviewer": "independent test context", "independent_context": True,
+            "first_pass_zero_comp_item_ids": [f"I{number}" for number in range(1, 11)],
             "sampled_item_ids": [f"I{number}" for number in range(1, 11)],
             "findings": [
                 {"item_id": f"I{number}", "outcome": "confirmed_exhaustion", "opened_urls": ["https://example.com/challenge"], "summary": "Opened challenge evidence did not establish a completed sale."}
                 for number in range(1, 11)
             ],
             "corrections_integrated": True,
+            "expanded_to_all_first_pass_zero_comp": True,
         }
         self.assertEqual("PASS", self.run_gate(rows, items, challenge)["status"])
+
+        challenge["sampled_item_ids"] = challenge["sampled_item_ids"][:-1]
+        challenge["findings"] = challenge["findings"][:-1]
+        with self.assertRaisesRegex(ValueError, "sample every first-pass zero-comp item"):
+            self.run_gate(rows, items, challenge)
 
 
 if __name__ == "__main__":

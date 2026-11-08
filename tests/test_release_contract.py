@@ -19,7 +19,7 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertFalse({"warehouse.py", "movement.py", "container_tracking.py"} & new_scripts)
 
     def test_version_is_two_point_three_zero(self) -> None:
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.3.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.4.0")
 
     def test_ci_actions_are_immutable_sha_pins(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")

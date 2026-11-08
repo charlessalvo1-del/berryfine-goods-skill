@@ -51,6 +51,15 @@ class CatalogBuilderContractTests(unittest.TestCase):
         self.assertIn("ColumnWidth=[double]", text)
         self.assertIn("RowHeight=[double]", text)
 
+    def test_research_history_rows_are_autofit_after_final_widths(self) -> None:
+        text = SCRIPT.read_text(encoding="utf-8-sig")
+        width_position = text.index("$sheet.Columns.Item(8).ColumnWidth")
+        autofit_position = text.index("$sheet.Rows.Item($rowNumber).AutoFit()")
+        self.assertLess(width_position, autofit_position)
+        self.assertIn("[Math]::Max(90.0, $fittedHeight)", text)
+        self.assertIn("[Math]::Min(408.0", text)
+        self.assertNotIn("$sheet.Rows.Item($rowNumber).RowHeight = 90", text)
+
 
 if __name__ == "__main__":
     unittest.main()

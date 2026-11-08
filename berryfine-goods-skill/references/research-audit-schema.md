@@ -12,6 +12,7 @@ Use schema version 2. Store one object per inventory item, every search attempt,
     "created_at": "2026-08-02T16:00:00-04:00",
     "reviewer": "independent research context",
     "independent_context": true,
+    "first_pass_zero_comp_item_ids": ["BFG-20260802-0001"],
     "sampled_item_ids": ["BFG-20260802-0001"],
     "findings": [
       {
@@ -21,7 +22,8 @@ Use schema version 2. Store one object per inventory item, every search attempt,
         "summary": "Challenge found a missed completed transaction; it was integrated before gating."
       }
     ],
-    "corrections_integrated": true
+    "corrections_integrated": true,
+    "expanded_to_all_first_pass_zero_comp": true
   },
   "items": [
     {
@@ -103,7 +105,7 @@ Every attempt must store a reproducible `search_url`, the returned `result_urls`
 
 For a visually distinctive or unmarked item, use image search as an identification lead. Search results and active listings may establish vocabulary, candidate maker/model, and distinctive construction, but only completed transactions may be included as sold comparables.
 
-An item with no included comparable must remain `REVIEW` and must record at least four distinct query formulations, including both `image_search` and `marketplace_sold`, across at least two search surfaces. It must also include:
+An item with no included comparable must remain `REVIEW` and must record at least four distinct query formulations, including both `image_search` and `marketplace_sold`, across at least two search surfaces. It must open at least three unique direct result pages, including one reached through image search and one direct completed-sale or auction candidate. Search results, category indexes, and storefront pages are not direct evidence. It must also include:
 
 ```json
 "exhaustion": {
@@ -121,4 +123,4 @@ Do not reuse one sold URL as support for more than three different inventory ite
 
 ## Independent challenge review
 
-When a batch contains ten or more zero-comp items, independently challenge at least ten of the most searchable items before authorization. Prefer visible brands, titles, ISBNs, UPCs, model numbers, named makers, and distinctive Japanese or collectible forms. The challenge context must not assume the first pass is correct. Record one finding per sampled item with `confirmed_exhaustion`, `correction_found`, or `not_searchable`, plus every opened URL. Integrate every correction before setting `corrections_integrated=true`. A missing challenge, a sample below ten, or unintegrated corrections blocks the batch.
+When a batch contains ten or more zero-comp items, store every first-pass zero-comp item ID and independently challenge the complete population before authorization. Prefer visible brands, titles, ISBNs, UPCs, model numbers, named makers, and distinctive Japanese or collectible forms first, then review the remainder. The challenge context must not assume the first pass is correct. Record one finding per item with `confirmed_exhaustion`, `correction_found`, or `not_searchable`, plus every direct opened URL. Integrate every correction, set `expanded_to_all_first_pass_zero_comp=true`, and make `sampled_item_ids` exactly match `first_pass_zero_comp_item_ids`. A partial challenge or unintegrated correction blocks the batch.

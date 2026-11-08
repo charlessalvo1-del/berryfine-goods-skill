@@ -134,6 +134,9 @@ try {
     # Disposition colors below are direct fills, not new conditional rules.
     $allNewRows.ClearContents()
     $allNewRows.Interior.Pattern = $xlPatternNone; $allNewRows.Interior.ColorIndex = $xlPatternNone
+    # Establish final wrapping widths before AutoFit calculates row heights.
+    $sheet.Columns.Item(8).ColumnWidth = [Math]::Max([double]$sheet.Columns.Item(8).ColumnWidth, 55)
+    $sheet.Columns.Item(10).ColumnWidth = 22
     for ($index = 0; $index -lt $catalogRows.Count; $index++) {
         $rowNumber = $firstNewRow + $index; $record = $catalogRows[$index]
         $target = $sheet.Range("A$rowNumber`:J$rowNumber")
@@ -146,7 +149,12 @@ try {
         Set-TextCell $sheet.Cells.Item($rowNumber, 8) $record.history_info
         $sheet.Cells.Item($rowNumber, 9).ClearContents()
         Set-TextCell $sheet.Cells.Item($rowNumber, 10) $record.recommended_action
-        $target.WrapText = $true; $target.VerticalAlignment = $xlTop; $sheet.Rows.Item($rowNumber).RowHeight = 90
+        $target.WrapText = $true; $target.VerticalAlignment = $xlTop
+        # Long research histories must remain visible in print/PDF review. A
+        # fixed 90-point row silently clipped evidence-rich descriptions.
+        [void]$sheet.Rows.Item($rowNumber).AutoFit()
+        $fittedHeight = [double]$sheet.Rows.Item($rowNumber).RowHeight
+        $sheet.Rows.Item($rowNumber).RowHeight = [Math]::Min(408.0, [Math]::Max(90.0, $fittedHeight))
         if ($record.recommended_action -in @('DONATE','REVIEW','CONFIRM DONATION')) { $target.Interior.Pattern = $xlSolid; $target.Interior.Color = $yellow }
     }
 
