@@ -370,7 +370,10 @@ For a single item, give a compact appraisal plus the evidence links.
 
 For a batch, report:
 
-- counts received, processed, sell, donate, confirm donation, and review
+- a mandatory disposition summary after every run with total items, `SELL`, `DONATE`, `CONFIRM DONATION`, and `REVIEW`; require the four disposition counts to add exactly to total items
+- a separate `Needs owner attention` total equal to `REVIEW + CONFIRM DONATION`, with both component counts shown; do not mix this operational attention total with formal `human_review_status`
+- the count whose formal `human_review_status` is `PENDING`, when applicable, labeled separately from disposition and owner-attention totals
+- counts received and processed, including exclusions when they differ from total inventory items
 - aggregate low, mid, and high market value
 - highest-value and highest-uncertainty items
 - missing photos or research blockers
