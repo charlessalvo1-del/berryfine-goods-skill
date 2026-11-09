@@ -1,8 +1,8 @@
 # Structured research audit
 
-## v2.9 adaptive-age marketplace pilot
+## v2.9.1 adaptive-age marketplace pilot
 
-New and re-run intakes use `research_policy_version=2.9.0-pilot` and `scripts/price_first_gate.py`. Record `price_synthesis.method=weighted_marketplace_median`, `price_type`, the supported low/mid/high interval, decision basis, conservative decision floor, Etsy and eBay recommendations, pricing confidence, and decision confidence.
+New and re-run intakes use `research_policy_version=2.9.1-pilot` and `scripts/price_first_gate.py`. Record `price_synthesis.method=weighted_marketplace_median`, `price_type`, the supported low/mid/high interval, decision basis, conservative decision floor, Etsy and eBay recommendations, pricing confidence, decision confidence, and the deterministic `decision_rule`. The controlled $50 decision rules never apply to zero-comp operational prices.
 
 The research population must exactly match the ledger. An included active comp requires `availability_status=available`; a sold/completed comp requires `sale_date`. Every included comp requires `seller_key`, nonempty `matched_attributes`, `mismatched_attributes`, and a direct evidence capture. Exact comps cannot contain material mismatches. Sold evidence is time-weighted through 36 months; older rare evidence requires current active corroboration. Auctions are identification-only. Price issuance does not authorize listing or publication, and every AI-created row remains DRAFT/PENDING.
 

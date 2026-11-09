@@ -348,6 +348,7 @@ def validate_row(
         price_type = row["price_type"]
         identity_eligible = row["identification_confidence"] in {"confirmed", "probable"}
         safety_eligible = row["safety_status"] == "CLEAR"
+        direct_comp_count = int(float(row.get("comp_count") or 0))
         if price_type == "unpriced":
             required_decision = "REVIEW"
             if has_supported_range or basis_value is not None:
@@ -367,7 +368,7 @@ def validate_row(
                 raise InventoryError(f"{label} provisional price requires low confidence")
             if basis_value is not None and 40 <= basis_value < 50:
                 required_decision = "CONFIRM DONATION"
-            elif basis_value is not None and basis_value >= 55 and row["decision_confidence"] in {"medium", "high"}:
+            elif basis_value is not None and (basis_value >= 55 or (basis_value >= 50 and direct_comp_count >= 2)) and row["decision_confidence"] in {"medium", "high"}:
                 required_decision = "SELL"
             else:
                 required_decision = "REVIEW"
@@ -378,7 +379,7 @@ def validate_row(
                 required_decision = "DONATE"
             elif basis_value is not None and 40 <= basis_value < 50:
                 required_decision = "CONFIRM DONATION"
-            elif basis_value is not None and basis_value >= 55 and row["decision_confidence"] in {"medium", "high"}:
+            elif basis_value is not None and (basis_value >= 55 or (basis_value >= 50 and direct_comp_count >= 2)) and row["decision_confidence"] in {"medium", "high"}:
                 required_decision = "SELL"
             else:
                 required_decision = "REVIEW"

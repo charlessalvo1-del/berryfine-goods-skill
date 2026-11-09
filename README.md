@@ -1,6 +1,6 @@
 # Berryfine Goods Skill
 
-Version 2.9.0 pilots adaptive-age pricing and independent decision confidence. eBay sold evidence remains usable through three years with documented time weights, while scarce vintage evidence older than three years requires current active corroboration. Active-only evidence produces a conservative decision floor, so BFG can make a supported SELL decision even when the exact price remains imprecise. MEDIUM pricing now requires stable dispersion, unavailable listings are excluded, direct comps require structured attribute and seller checks, and the 6/8/10 search budget is measured explicitly without adding searches.
+Version 2.9.1 adds a controlled $50 sale-boundary exception to adaptive-age pricing and independent decision confidence. The normal $55 conservative-floor rule remains primary. Confirmed/probable, safety-clear items may also qualify at $50 when at least two direct prices produce a conservative floor of at least $49.50, when two or more stable direct prices have an observed floor of at least $50, or when exactly two tightly grouped active prices bracket $50 and support a controlled test listing. Zero-comp operational $45 items remain CONFIRM DONATION.
 
 The standard-saleable condition assumption remains in force: absent positive contrary evidence, value items as complete, functional, saleable, and in typical good used condition. Missing condition detail alone does not cause REVIEW.
 

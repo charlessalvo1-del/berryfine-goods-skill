@@ -50,7 +50,7 @@ def write_book(path: Path, sheets: dict[str, dict[str, tuple[str, int]]]) -> Non
         last_row = max(rows)
         last_col_num = max(column_index(ref) for ref in cells)
         last_col = chr(64 + last_col_num)
-        worksheet_parts.append((f"xl/worksheets/sheet{index}.xml", f'<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="10" max="10" width="20" customWidth="1"/></cols><sheetData>{row_xml}</sheetData><autoFilter ref="A1:{last_col}{last_row}"/></worksheet>'))
+        worksheet_parts.append((f"xl/worksheets/sheet{index}.xml", f'<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="10" max="11" width="20" customWidth="1"/></cols><sheetData>{row_xml}</sheetData><autoFilter ref="A1:{last_col}{last_row}"/></worksheet>'))
 
     workbook = f'<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>{"".join(sheet_nodes)}</sheets><definedNames>{"".join(print_areas)}</definedNames></workbook>'
     rels = f'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{"".join(rel_nodes)}<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'
@@ -93,7 +93,8 @@ class CatalogGateTests(unittest.TestCase):
         write_book(template, {"Inventory List": historical})
         current = dict(historical)
         current["J1"] = ("RECOMMENDED ACTION", 0)
-        for column in "ABCDEFGHIJ":
+        current["K1"] = ("RESEARCH REVIEW", 0)
+        for column in "ABCDEFGHIJK":
             current[f"{column}3"] = ("", 1)
         current.update({
             "A3": ("Current item", 1), "B3": ("item-1", 1), "D3": ("Storage", 1),
@@ -132,8 +133,9 @@ class CatalogGateTests(unittest.TestCase):
                 "D1": ("LOCATION", 0), "H1": ("HISTORY/INFO", 0),
                 "A2": ("Historical item", 0), "D2": ("Storage", 0),
                 "J1": ("RECOMMENDED ACTION", 0),
+                "K1": ("RESEARCH REVIEW", 0),
             }
-            for column in "ABCDEFGHIJ":
+            for column in "ABCDEFGHIJK":
                 changed[f"{column}3"] = ("", 1)
             changed.update({"A3": ("Current", 1), "B3": ("item-1", 1), "D3": ("Storage", 1), "H3": ("History", 2), "I3": ("", 1), "J3": ("CONFIRM DONATION", 1)})
             write_book(catalog, {"Inventory List": changed})
@@ -149,11 +151,12 @@ class CatalogGateTests(unittest.TestCase):
             exceptions = root / "Example Exceptions.xlsx"
             historical = {
                 "D1": ("LOCATION", 0), "H1": ("HISTORY/INFO", 0), "J1": ("RECOMMENDED ACTION", 0),
+                "K1": ("RESEARCH REVIEW", 0),
                 "B2": ("OLD-1", 0), "D2": ("Warehouse A", 0), "J2": ("SELL", 0),
             }
             write_book(template, {"Inventory List": historical})
             current = dict(historical)
-            for column in "ABCDEFGHIJ":
+            for column in "ABCDEFGHIJK":
                 current[f"{column}3"] = ("", 1)
             current.update({
                 "B3": ("item-1", 1), "D3": ("Storage", 1), "H3": ("Supported evidence", 2),

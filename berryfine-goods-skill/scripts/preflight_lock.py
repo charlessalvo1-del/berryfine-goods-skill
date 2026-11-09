@@ -42,7 +42,7 @@ CATALOG_RULES = {
     "condition_assumption": "complete, functional, saleable, and typical good used condition unless positive evidence shows otherwise",
     "missing_condition_detail_requires_review": False,
     "planned_testing_valuation_basis": "tested_working",
-    "research_policy_version": "2.9.0-pilot",
+    "research_policy_version": "2.9.1-pilot",
     "research_stop_rule": "adaptive 6/8/10 ladder; stop at six when HIGH pricing or decision confidence resolves the outcome, use searches seven-eight only for unresolved identity/evidence/boundary questions, and reserve nine-ten for high-value, rare, regulated, or materially misidentified candidates",
     "low_value_boundary_stop": "after search eight, a confirmed/probable common low-value zero-comp item may receive a $45 operational handling price and CONFIRM DONATION; this is not a market-value claim",
     "high_value_research_threshold": 125.0,

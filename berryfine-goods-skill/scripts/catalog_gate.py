@@ -354,6 +354,8 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         raise CatalogError("Catalog sheet name or header row changed from the template")
     if str(catalog_cells.get(f"J{catalog_header}", {}).get("value", "")).strip() != "RECOMMENDED ACTION":
         raise CatalogError("Catalog column J header must be RECOMMENDED ACTION")
+    if str(catalog_cells.get(f"K{catalog_header}", {}).get("value", "")).strip() != "RESEARCH REVIEW":
+        raise CatalogError("Catalog column K header must be RESEARCH REVIEW")
 
     template_has_action_column = str(template_cells.get(f"J{template_header}", {}).get("value", "")).strip() == "RECOMMENDED ACTION"
     for ref, expected in relevant_cells(template_cells, max_col=10 if template_has_action_column else 9).items():
@@ -386,9 +388,13 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
 
     ledger_rows = load_current_ledger(args.ledger, args.intake_id)
     payload_rows: list[dict[str, Any]] = []
+    payload_research: list[dict[str, Any]] = []
+    payload_evidence: list[dict[str, Any]] = []
     if args.catalog_payload:
         payload = json.loads(args.catalog_payload.read_text(encoding="utf-8-sig"))
         payload_rows = payload.get("catalog_rows", [])
+        payload_research = payload.get("research_review", [])
+        payload_evidence = payload.get("research_evidence", [])
         if payload.get("intake_id") != args.intake_id or not isinstance(payload_rows, list):
             raise CatalogError("Catalog payload does not match the requested intake")
         if builder_verification and builder_verification.get("payload_sha256") != sha256_file(args.catalog_payload):
@@ -431,6 +437,8 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
             raise CatalogError(f"New row {row_number} is missing HISTORY/INFO")
         if str(catalog_cells.get(f"I{row_number}", {}).get("value", "")).strip():
             raise CatalogError(f"New row {row_number} must leave column I blank")
+        if payload_research and str(catalog_cells.get(f"K{row_number}", {}).get("value", "")).strip() != "Open research":
+            raise CatalogError(f"New row {row_number} is missing its RESEARCH REVIEW link")
         for column in "ABCDEFGHIJ":
             style_id = int(catalog_cells.get(f"{column}{row_number}", {}).get("style", 0))
             fill = catalog_styles.get(style_id, {"fill": ("unknown", "")})["fill"]
@@ -444,18 +452,44 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
 
     final_row = max(row for row, _, _ in action_rows)
     filter_ranges = catalog_cells.get("__filter_ranges__", {}).get("value", [])
-    if not any(range_covers(reference, row=final_row, column=10) for reference in filter_ranges):
-        raise CatalogError("Catalog table or filter range must extend through column J and the final row")
+    if not any(range_covers(reference, row=final_row, column=11) for reference in filter_ranges):
+        raise CatalogError("Catalog table or filter range must extend through column K and the final row")
     print_area = str(catalog_cells.get("__print_area__", {}).get("value", ""))
-    if not range_covers(print_area, row=final_row, column=10):
-        raise CatalogError("Catalog print area must extend through column J and the final row")
+    if not range_covers(print_area, row=final_row, column=11):
+        raise CatalogError("Catalog print area must extend through column K and the final row")
     column_widths = catalog_cells.get("__column_widths__", {}).get("value", [])
     if not any(
-        int(column.get("min", "0")) <= 10 <= int(column.get("max", "0"))
+        int(column.get("min", "0")) <= 11 <= int(column.get("max", "0"))
         and float(column.get("width", "0")) > 0
         for column in column_widths
     ):
-        raise CatalogError("Catalog column J must have an explicit usable width")
+        raise CatalogError("Catalog column K must have an explicit usable width")
+
+    if payload_research:
+        if "Research Review" not in catalog_sheets or "Comparable Evidence" not in catalog_sheets:
+            raise CatalogError("Catalog is missing Research Review or Comparable Evidence")
+        review_cells = catalog_sheets["Research Review"]
+        evidence_cells = catalog_sheets["Comparable Evidence"]
+        if str(review_cells.get("A1", {}).get("value", "")).strip() != "Item ID":
+            raise CatalogError("Research Review must begin with Item ID")
+        if str(evidence_cells.get("A1", {}).get("value", "")).strip() != "Item ID":
+            raise CatalogError("Comparable Evidence must begin with Item ID")
+        review_ids = {
+            str(cell.get("value", "")).strip()
+            for ref, cell in review_cells.items()
+            if (match := CELL_RE.match(ref)) and match.group(1) == "A" and int(match.group(2)) >= 2
+            and str(cell.get("value", "")).strip()
+        }
+        expected_review_ids = {str(row.get("item_id", "")).strip() for row in payload_research}
+        if review_ids != expected_review_ids:
+            raise CatalogError("Research Review item IDs do not match the catalog payload")
+        evidence_count = sum(
+            1 for ref, cell in evidence_cells.items()
+            if (match := CELL_RE.match(ref)) and match.group(1) == "A" and int(match.group(2)) >= 2
+            and str(cell.get("value", "")).strip()
+        )
+        if evidence_count != len(payload_evidence):
+            raise CatalogError("Comparable Evidence row count does not match the catalog payload")
 
     for sheet_name, cells in catalog_sheets.items():
         for ref, cell in cells.items():
@@ -479,6 +513,10 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
             name: sorted(ranges)
             for name, ranges in catalog_cf.items()
         }
+        if payload_research:
+            expected_cf = dict(expected_cf)
+            expected_cf["Research Review"] = []
+            expected_cf["Comparable Evidence"] = []
     if catalog_cf != expected_cf:
         raise CatalogError(
             "Catalog conditional-format ranges changed beyond the retained-row boundary; "

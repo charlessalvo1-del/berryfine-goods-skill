@@ -9,7 +9,7 @@ from datetime import date, datetime
 from typing import Any
 
 
-POLICY_VERSION = "2.9.0-pilot"
+POLICY_VERSION = "2.9.1-pilot"
 AUTO_IDENTITIES = {"confirmed", "probable"}
 UNAVAILABLE_MARKERS = ("unavailable", "sold out", "out of stock", "not available")
 
@@ -121,6 +121,11 @@ def _round_price(value: float) -> float:
     return round(value / 5) * 5.0
 
 
+def _round_currency(value: float) -> float:
+    """Round positive USD evidence to cents using ordinary half-up behavior."""
+    return math.floor(value * 100 + 0.5) / 100
+
+
 def _decision_floor(comps: list[dict[str, Any]], prices: list[float]) -> float:
     sold = any(str(comp.get("listing_status", "")).casefold() in {"sold", "completed"} for comp in comps)
     exact = sum(str(comp.get("comparability", "")).casefold() == "exact" for comp in comps)
@@ -169,7 +174,7 @@ def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[st
                 "market_value_mid": 45.0, "market_value_high": 49.99, "decision_basis_value": 45.0,
                 "etsy_price": 45.0, "ebay_price": 45.0, "decision": "CONFIRM DONATION",
                 "rationale": "$40-$50 STAFF DECISION: operational $45 handling price after eight searches; this is not a market-value claim. Confirm this item will not be sold before donation or rehoming.",
-                "comp_count": 0, **empty_metrics,
+                "comp_count": 0, "decision_rule": "operational_staff_band", **empty_metrics,
             }
         return {
             "price_type": "unpriced", "pricing_confidence": "low", "decision_confidence": "low",
@@ -177,7 +182,7 @@ def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[st
             "market_value_mid": None, "market_value_high": None, "decision_basis_value": None,
             "etsy_price": None, "ebay_price": None, "decision": "REVIEW",
             "rationale": "No defensible direct-market price; specialist or staff pricing review required.",
-            "comp_count": 0, **empty_metrics,
+            "comp_count": 0, "decision_rule": "unpriced_review", **empty_metrics,
         }
 
     prices = [value for value, _ in weighted]
@@ -207,20 +212,64 @@ def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[st
     floor = _decision_floor(included, prices)
     price_type = "market" if confidence in {"high", "medium"} else "provisional"
     eligible = identity in AUTO_IDENTITIES and safety_status == "CLEAR"
+    rounded_floor_sell = len(included) >= 2 and floor >= 49.50 and ebay >= 50
+    stable_two_comp_sell = (
+        len(included) >= 2 and low >= 50 and cv <= 0.25 and ratio <= 1.75
+    )
+    active_comp_count = sum(
+        str(comp.get("listing_status", "")).casefold() == "active" for comp in included
+    )
+    bracket_midpoint = _round_currency((low + high) / 2)
+    controlled_active_bracket_sell = (
+        len(included) == 2
+        and active_comp_count == 2
+        and 40 <= low < 50 <= high
+        and bracket_midpoint >= 47.50
+        and ratio <= 1.35
+    )
+    decision_rule = "review"
     if not eligible:
         decision, decision_confidence = "REVIEW", "low"
         reason = "Price issued, but identification or safety confidence requires review."
+        decision_rule = "identity_or_safety_review"
     elif floor >= 55:
         decision = "SELL"
         decision_confidence = "high" if floor >= 65 and len(included) >= 2 else "medium"
         reason = f"Conservative decision floor ${floor:.2f} clears the $55 automatic-sale threshold."
+        decision_rule = "decision_floor_55"
+    elif rounded_floor_sell:
+        decision, decision_confidence = "SELL", "medium"
+        ebay = max(50.0, ebay)
+        reason = (
+            f"Conservative decision floor ${floor:.2f} rounds to the $50 sale boundary; "
+            "list at $50 with human approval."
+        )
+        decision_rule = "rounded_floor_50"
+    elif stable_two_comp_sell:
+        decision, decision_confidence = "SELL", "medium"
+        ebay = max(50.0, ebay)
+        reason = (
+            f"At least two stable direct prices have a $50-or-higher observed floor "
+            f"(CV {cv:.3f}; ratio {ratio:.3f}); list at no less than $50 with human approval."
+        )
+        decision_rule = "stable_two_comp_floor_50"
+    elif controlled_active_bracket_sell:
+        decision, decision_confidence = "SELL", "medium"
+        ebay = 50.0
+        reason = (
+            f"Two direct active prices tightly bracket $50 (midpoint ${bracket_midpoint:.2f}; "
+            f"ratio {ratio:.3f}); use a controlled $50 test listing with human approval."
+        )
+        decision_rule = "controlled_active_bracket_50"
     elif confidence in {"high", "medium"} and high < 40:
         decision = "DONATE"
         decision_confidence = "high" if high < 35 else "medium"
         reason = "Stable evidence keeps the complete credible value range below $40."
+        decision_rule = "stable_range_below_40"
     elif 40 <= ebay < 50:
         decision, decision_confidence = "CONFIRM DONATION", "medium"
         reason = "Recommended price is in the $40-$49.99 staff band. Confirm this item will not be sold before donation or rehoming."
+        decision_rule = "staff_band_40_49_99"
     else:
         decision, decision_confidence = "REVIEW", "low"
         reason = f"Price issued, but conservative decision floor ${floor:.2f} does not safely resolve a disposition threshold."
@@ -236,4 +285,5 @@ def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[st
         "sold_count": len(sold_comps), "recent_sold_count": recent_sold,
         "exact_count": exact, "decision_floor": floor,
         "excluded_pricing_comps": len(source) - len(included),
+        "decision_rule": decision_rule,
     }

@@ -17,6 +17,10 @@ class CatalogBuilderContractTests(unittest.TestCase):
         self.assertIn("retained_fill_method='excel-materialized-format-snapshot'", text)
         self.assertIn("$templateHasActionColumn", text)
         self.assertIn("historical_action_column_preserved=$templateHasActionColumn", text)
+        self.assertIn("'RESEARCH REVIEW'", text)
+        self.assertIn("'Research Review'", text)
+        self.assertIn("'Comparable Evidence'", text)
+        self.assertIn("'Open research'", text)
         self.assertNotIn("Cells.Item($row, 4).Value2 = 'Storage'", text)
 
     def test_paired_publication_rolls_back_on_failure(self) -> None:

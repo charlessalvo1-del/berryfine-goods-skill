@@ -13,7 +13,7 @@ from bfg_integrity import atomic_write_json, sha256_file, sha256_json
 from inventory_ledger import InventoryError, read_ledger, validate_row
 
 
-REQUIRED_RESEARCH_POLICY_VERSION = "2.9.0-pilot"
+REQUIRED_RESEARCH_POLICY_VERSION = "2.9.1-pilot"
 
 
 class CatalogPayloadError(ValueError):
@@ -96,15 +96,70 @@ def exception_for(row: dict[str, str], identity: dict[str, str]) -> dict[str, st
     }
 
 
+def research_tables(
+    rows: list[dict[str, str]], audit_path: Path | None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if audit_path is None:
+        return [], []
+    audit = json.loads(audit_path.read_text(encoding="utf-8-sig"))
+    audit_items = audit.get("items", [])
+    if not isinstance(audit_items, list):
+        raise CatalogPayloadError("Research audit items must be a list")
+    by_id = {str(item.get("item_id", "")): item for item in audit_items}
+    if set(by_id) != {row["item_id"] for row in rows}:
+        raise CatalogPayloadError("Research audit item IDs do not match the current ledger")
+    review: list[dict[str, Any]] = []
+    evidence: list[dict[str, Any]] = []
+    for row in rows:
+        item = by_id[row["item_id"]]
+        comps = item.get("pricing_comparables", [])
+        attempts = item.get("search_attempts", [])
+        review.append({
+            "item_id": row["item_id"],
+            "description": row["identified_name"],
+            "identification_confidence": row["identification_confidence"],
+            "pricing_confidence": row.get("valuation_confidence", ""),
+            "decision_confidence": row.get("decision_confidence", ""),
+            "recommended_action": row["decision"],
+            "recommended_price": float(row["ebay_price"]) if row.get("ebay_price") else None,
+            "supported_range": (
+                f"${float(row['market_value_low']):.2f}-${float(row['market_value_high']):.2f}"
+                if row.get("market_value_low") and row.get("market_value_high") else "Not established"
+            ),
+            "comparable_count": sum(comp.get("included") is True for comp in comps),
+            "search_count": len(attempts),
+            "evidence_status": "Needs review" if row["decision"] in {"REVIEW", "CONFIRM DONATION"} else "Validated",
+            "review_reason": row.get("decision_rationale", ""),
+            "reviewer_decision": "",
+            "reviewer_notes": "",
+        })
+        for comp in comps:
+            evidence.append({
+                "item_id": row["item_id"],
+                "comp_id": comp.get("comp_id", ""),
+                "marketplace": comp.get("marketplace", ""),
+                "listing_status": comp.get("listing_status", ""),
+                "comparability": comp.get("comparability", ""),
+                "price_usd": comp.get("normalized_unit_total_usd"),
+                "sale_date": comp.get("sale_date", ""),
+                "capture_date": comp.get("captured_at", ""),
+                "included": "YES" if comp.get("included") is True else "NO",
+                "exclusion_reason": comp.get("exclude_reason", ""),
+                "source_url": comp.get("source_url", ""),
+                "notes": comp.get("include_reason", "") or comp.get("match_differences", ""),
+            })
+    return review, evidence
+
+
 def build(args: argparse.Namespace) -> dict[str, Any]:
     verification = json.loads(args.research_verification.read_text(encoding="utf-8-sig"))
     if verification.get("status") != "PASS" or verification.get("intake_id") != args.intake_id:
         raise CatalogPayloadError("A current PASS research verification is required")
     verification_mode = verification.get("verification_mode", "current-research")
-    if verification_mode not in {"current-research", "legacy-catalog-refresh"}:
+    if verification_mode not in {"current-research", "policy-replay", "legacy-catalog-refresh"}:
         raise CatalogPayloadError("Unsupported research verification mode")
     if (
-        verification_mode == "current-research"
+        verification_mode in {"current-research", "policy-replay"}
         and verification.get("research_policy_version") != REQUIRED_RESEARCH_POLICY_VERSION
     ):
         raise CatalogPayloadError(
@@ -112,6 +167,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         )
     if verification.get("catalog_authorized") is False:
         raise CatalogPayloadError("Research verification does not authorize catalog creation")
+    if verification_mode == "policy-replay" and verification.get("listing_authorized") is not False:
+        raise CatalogPayloadError("Policy replay must explicitly prohibit listing authorization")
     if verification_mode == "legacy-catalog-refresh":
         if verification.get("listing_authorized") is not False:
             raise CatalogPayloadError(
@@ -135,6 +192,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     if verification.get("ledger_sha256") != sha256_file(args.ledger):
         raise CatalogPayloadError("Research verification is stale for the ledger")
     rows = read_rows(args.ledger, args.intake_id)
+    research_review, research_evidence = research_tables(rows, args.research_audit)
     mapping, grouping_hash = load_grouping(args.grouping, args.intake_id)
     if set(mapping) != {row["item_id"] for row in rows}:
         raise CatalogPayloadError("Grouping item IDs do not exactly match current-intake ledger item IDs")
@@ -174,6 +232,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "listing_authorized": False,
         "catalog_rows": catalog_rows,
         "exceptions": exceptions,
+        "research_review": research_review,
+        "research_evidence": research_evidence,
         "summary": {
             "item_count": len(catalog_rows),
             "exception_count": len(exceptions),
@@ -192,6 +252,11 @@ def main() -> int:
     parser.add_argument("--ledger", required=True, type=Path)
     parser.add_argument("--grouping", required=True, type=Path)
     parser.add_argument("--research-verification", required=True, type=Path)
+    parser.add_argument(
+        "--research-audit",
+        type=Path,
+        help="Optional structured research audit used to build reviewer hyperlinks and evidence tabs",
+    )
     parser.add_argument(
         "--preflight-lock",
         type=Path,

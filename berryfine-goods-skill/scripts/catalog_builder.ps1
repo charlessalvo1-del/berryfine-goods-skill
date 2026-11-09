@@ -50,6 +50,8 @@ function Find-CatalogSheet($book) {
 $payload = Get-Content -Raw -Encoding UTF8 -LiteralPath $PayloadPath | ConvertFrom-Json
 $catalogRows = @($payload.catalog_rows)
 $exceptionRows = @($payload.exceptions)
+$researchRows = @($payload.research_review)
+$evidenceRows = @($payload.research_evidence)
 if ($catalogRows.Count -lt 1) { throw 'Catalog payload contains no rows.' }
 $clientName = [string]$payload.client_name
 $catalogBase = if ($clientName.EndsWith(' New Catalog', [StringComparison]::OrdinalIgnoreCase)) { $clientName } else { "$clientName New Catalog" }
@@ -113,6 +115,8 @@ try {
         if ($retainedLastRow -gt $headerRow) { $sheet.Range("J$($headerRow + 1)`:J$retainedLastRow").ClearContents() }
         Set-TextCell $sheet.Cells.Item($headerRow, 10) 'RECOMMENDED ACTION'
     }
+    [void]$sheet.Cells.Item($headerRow, 10).Copy($sheet.Cells.Item($headerRow, 11))
+    Set-TextCell $sheet.Cells.Item($headerRow, 11) 'RESEARCH REVIEW'
 
     if ($sheet.ListObjects.Count -gt 0) {
         $table = $sheet.ListObjects.Item(1)
@@ -132,20 +136,25 @@ try {
     # the following writes replace any transient copy state safely.
     $templateBook.Close($false); $templateBook = $null
     if ($sheet.AutoFilterMode) { $sheet.AutoFilterMode = $false }
-    $sheet.Range($sheet.Cells.Item($headerRow, 2), $sheet.Cells.Item($finalRow, 10)).AutoFilter() | Out-Null
+    $sheet.Range($sheet.Cells.Item($headerRow, 2), $sheet.Cells.Item($finalRow, 11)).AutoFilter() | Out-Null
     # Extend the source row's complete Excel behavior once instead of making a
     # clipboard call per item. Clear values and fills in one bulk operation,
     # then write the validated payload.
     [void]$sheet.Range("A$styleSourceRow`:I$styleSourceRow").Copy($sheet.Range("A$firstNewRow`:I$finalRow"))
     [void]$sheet.Cells.Item($styleSourceRow, 9).Copy($sheet.Range("J$firstNewRow`:J$finalRow"))
+    [void]$sheet.Cells.Item($styleSourceRow, 9).Copy($sheet.Range("K$firstNewRow`:K$finalRow"))
     $allNewRows = $sheet.Range("A$firstNewRow`:J$finalRow")
     # Preserve the template's historical conditional-format ranges exactly.
     # Disposition colors below are direct fills, not new conditional rules.
     $allNewRows.ClearContents()
     $allNewRows.Interior.Pattern = $xlPatternNone; $allNewRows.Interior.ColorIndex = $xlPatternNone
+    $sheet.Range("K$firstNewRow`:K$finalRow").ClearContents()
+    $sheet.Range("K$firstNewRow`:K$finalRow").Interior.Pattern = $xlPatternNone
+    $sheet.Range("K$firstNewRow`:K$finalRow").Interior.ColorIndex = $xlPatternNone
     # Establish final wrapping widths before AutoFit calculates row heights.
     $sheet.Columns.Item(8).ColumnWidth = [Math]::Max([double]$sheet.Columns.Item(8).ColumnWidth, 55)
     $sheet.Columns.Item(10).ColumnWidth = 22
+    $sheet.Columns.Item(11).ColumnWidth = 17
     for ($index = 0; $index -lt $catalogRows.Count; $index++) {
         $rowNumber = $firstNewRow + $index; $record = $catalogRows[$index]
         $target = $sheet.Range("A$rowNumber`:J$rowNumber")
@@ -172,11 +181,63 @@ try {
         if ($record.recommended_action -in @('DONATE','REVIEW','CONFIRM DONATION')) { $target.Interior.Pattern = $xlSolid; $target.Interior.Color = $yellow }
     }
 
+    # Reviewer research is kept on normalized tabs so the Inventory List needs
+    # only one compact internal link per item.
+    $researchSheet = $catalogBook.Worksheets.Add(); $researchSheet.Name = 'Research Review'
+    $evidenceSheet = $catalogBook.Worksheets.Add(); $evidenceSheet.Name = 'Comparable Evidence'
+    $researchSheet.Move([Type]::Missing, $sheet)
+    $evidenceSheet.Move([Type]::Missing, $researchSheet)
+    $reviewHeaders = @('Item ID','Description','Identification Confidence','Pricing Confidence','Decision Confidence','Recommended Action','Recommended Price','Supported Range','Comparable Count','Search Count','Evidence Status','Review Reason','Reviewer Decision','Reviewer Notes','Evidence Details')
+    $evidenceHeaders = @('Item ID','Comparable','Marketplace','Listing Status','Comparability','Price USD','Sale Date','Capture Date','Included','Exclusion Reason','Source Link','Evidence Notes')
+    for($col=1;$col -le $reviewHeaders.Count;$col++){Set-TextCell $researchSheet.Cells.Item(1,$col) $reviewHeaders[$col-1]}
+    for($col=1;$col -le $evidenceHeaders.Count;$col++){Set-TextCell $evidenceSheet.Cells.Item(1,$col) $evidenceHeaders[$col-1]}
+    $evidenceFirstRowByItem = @{}
+    for($index=0;$index -lt $evidenceRows.Count;$index++){
+        $record=$evidenceRows[$index]; $rowNumber=$index+2
+        $values=@($record.item_id,$record.comp_id,$record.marketplace,$record.listing_status,$record.comparability,$record.price_usd,$record.sale_date,$record.capture_date,$record.included,$record.exclusion_reason,'',$record.notes)
+        for($col=1;$col -le 12;$col++){if($col -eq 6 -and $null -ne $values[$col-1] -and -not [string]::IsNullOrWhiteSpace([string]$values[$col-1])){$evidenceSheet.Cells.Item($rowNumber,$col).Value2=[double]$values[$col-1]}else{Set-TextCell $evidenceSheet.Cells.Item($rowNumber,$col) $values[$col-1]}}
+        $evidenceSheet.Cells.Item($rowNumber,6).NumberFormat='$#,##0.00'
+        $itemKey=[string]$record.item_id; if(-not $evidenceFirstRowByItem.ContainsKey($itemKey)){$evidenceFirstRowByItem[$itemKey]=$rowNumber}
+        $url=[string]$record.source_url; if(-not [string]::IsNullOrWhiteSpace($url)){
+            [void]$evidenceSheet.Hyperlinks.Add($evidenceSheet.Cells.Item($rowNumber,11),$url,'','','Open source')
+        }
+    }
+    $reviewRowByItem=@{}
+    for($index=0;$index -lt $researchRows.Count;$index++){
+        $record=$researchRows[$index]; $rowNumber=$index+2; $itemKey=[string]$record.item_id
+        $values=@($itemKey,$record.description,$record.identification_confidence,$record.pricing_confidence,$record.decision_confidence,$record.recommended_action,$record.recommended_price,$record.supported_range,$record.comparable_count,$record.search_count,$record.evidence_status,$record.review_reason,$record.reviewer_decision,$record.reviewer_notes,'')
+        for($col=1;$col -le 15;$col++){if($col -eq 7 -and $null -ne $values[$col-1] -and -not [string]::IsNullOrWhiteSpace([string]$values[$col-1])){$researchSheet.Cells.Item($rowNumber,$col).Value2=[double]$values[$col-1]}elseif($col -eq 9 -or $col -eq 10){$researchSheet.Cells.Item($rowNumber,$col).Value2=[double]$values[$col-1]}else{Set-TextCell $researchSheet.Cells.Item($rowNumber,$col) $values[$col-1]}}
+        $researchSheet.Cells.Item($rowNumber,7).NumberFormat='$#,##0.00'; $reviewRowByItem[$itemKey]=$rowNumber
+        if($evidenceFirstRowByItem.ContainsKey($itemKey)){
+            [void]$researchSheet.Hyperlinks.Add($researchSheet.Cells.Item($rowNumber,15),'',"'Comparable Evidence'!A$($evidenceFirstRowByItem[$itemKey])",'','Open evidence')
+        }
+    }
+    for($index=0;$index -lt $catalogRows.Count;$index++){
+        $rowNumber=$firstNewRow+$index; $itemKey=[string]$catalogRows[$index].item_id
+        if($reviewRowByItem.ContainsKey($itemKey)){
+            [void]$sheet.Hyperlinks.Add($sheet.Cells.Item($rowNumber,11),'',"'Research Review'!A$($reviewRowByItem[$itemKey])",'','Open research')
+        }
+    }
+    $reviewLast=[Math]::Max(1,1+$researchRows.Count); $evidenceLast=[Math]::Max(1,1+$evidenceRows.Count)
+    foreach($spec in @(@($researchSheet,15,$reviewLast),@($evidenceSheet,12,$evidenceLast))){
+        $reviewSheet=$spec[0];$lastCol=[int]$spec[1];$lastRow=[int]$spec[2]
+        $header=$reviewSheet.Range($reviewSheet.Cells.Item(1,1),$reviewSheet.Cells.Item(1,$lastCol));$header.Font.Bold=$true;$header.Font.Color=16777215;$header.Interior.Pattern=$xlSolid;$header.Interior.Color=3169331;$header.HorizontalAlignment=$xlCenter
+        $range=$reviewSheet.Range($reviewSheet.Cells.Item(1,1),$reviewSheet.Cells.Item($lastRow,$lastCol));$range.VerticalAlignment=$xlTop;$range.AutoFilter()|Out-Null
+        $reviewSheet.Activate();$excel.ActiveWindow.SplitRow=1;$excel.ActiveWindow.SplitColumn=1;$excel.ActiveWindow.FreezePanes=$true
+    }
+    $reviewWidths=@(20,38,18,18,18,22,16,20,16,14,18,55,20,35,18);for($col=1;$col -le 15;$col++){$researchSheet.Columns.Item($col).ColumnWidth=[double]$reviewWidths[$col-1]}
+    $evidenceWidths=@(20,22,14,16,16,14,14,20,12,40,16,50);for($col=1;$col -le 12;$col++){$evidenceSheet.Columns.Item($col).ColumnWidth=[double]$evidenceWidths[$col-1]}
+    $researchSheet.Range("B2:B$reviewLast").WrapText=$true;$researchSheet.Range("L2:N$reviewLast").WrapText=$true
+    $evidenceSheet.Range("J2:L$evidenceLast").WrapText=$true
+    $researchSheet.PageSetup.PrintArea=$researchSheet.Range("A1:O$reviewLast").Address();$researchSheet.PageSetup.Orientation=2;$researchSheet.PageSetup.Zoom=$false;$researchSheet.PageSetup.FitToPagesWide=1;$researchSheet.PageSetup.FitToPagesTall=$false
+    $evidenceSheet.PageSetup.PrintArea=$evidenceSheet.Range("A1:L$evidenceLast").Address();$evidenceSheet.PageSetup.Orientation=2;$evidenceSheet.PageSetup.Zoom=$false;$evidenceSheet.PageSetup.FitToPagesWide=1;$evidenceSheet.PageSetup.FitToPagesTall=$false
+
     # Excel can silently expand a template rule when row formats are copied.
     # Remove conditional formatting only from the blank/new-row region. Excel
     # trims any overlapping AppliesTo range while preserving historical rules.
     $conditionalFormatLastRow = [Math]::Max($formattedLastRow, $finalRow)
     $sheet.Range("A$firstNewRow`:J$conditionalFormatLastRow").FormatConditions.Delete()
+    $sheet.Range("K$firstNewRow`:K$conditionalFormatLastRow").FormatConditions.Delete()
 
     # Extend summary formulas above the header when they end at the old retained row.
     for ($row = 1; $row -lt $headerRow; $row++) {
@@ -188,7 +249,8 @@ try {
     }
     $sheet.Columns.Item(8).ColumnWidth = [Math]::Max([double]$sheet.Columns.Item(8).ColumnWidth, 55)
     $sheet.Columns.Item(10).ColumnWidth = 22
-    $sheet.PageSetup.PrintArea = $sheet.Range($sheet.Cells.Item(1, 2), $sheet.Cells.Item($finalRow, 10)).Address()
+    $sheet.Columns.Item(11).ColumnWidth = 17
+    $sheet.PageSetup.PrintArea = $sheet.Range($sheet.Cells.Item(1, 2), $sheet.Cells.Item($finalRow, 11)).Address()
     $sheet.PageSetup.Orientation = 2; $sheet.PageSetup.Zoom = $false; $sheet.PageSetup.FitToPagesWide = 1; $sheet.PageSetup.FitToPagesTall = $false
     $sheet.Calculate()
 
@@ -208,6 +270,7 @@ try {
         if ([string]$sheet.Cells.Item($rowNumber, 8).Value2 -ne [string]$record.history_info) { throw "HISTORY/INFO mismatch at row $rowNumber." }
         if ($null -ne $sheet.Cells.Item($rowNumber, 9).Value2) { throw "Column I is not blank at row $rowNumber." }
         if ([string]$sheet.Cells.Item($rowNumber, 10).Value2 -ne [string]$record.recommended_action) { throw "RECOMMENDED ACTION mismatch at row $rowNumber." }
+        if ($researchRows.Count -gt 0 -and [string]$sheet.Cells.Item($rowNumber, 11).Value2 -ne 'Open research') { throw "RESEARCH REVIEW link missing at row $rowNumber." }
         $yellowExpected = $record.recommended_action -in @('DONATE','REVIEW','CONFIRM DONATION')
         $displayPattern = $target.DisplayFormat.Interior.Pattern
         $displayColor = $target.DisplayFormat.Interior.Color
@@ -234,7 +297,7 @@ try {
     $exceptionsSheet.Activate(); $excel.ActiveWindow.SplitRow=1; $excel.ActiveWindow.FreezePanes=$true
     $exceptionsSheet.PageSetup.PrintArea=$exceptionsSheet.Range("A1:J$lastExceptionRow").Address(); $exceptionsSheet.PageSetup.Orientation=2; $exceptionsSheet.PageSetup.Zoom=$false; $exceptionsSheet.PageSetup.FitToPagesWide=1; $exceptionsSheet.PageSetup.FitToPagesTall=$false
     $exceptionsBook.SaveAs($exceptionsTemp,$xlOpenXMLWorkbook); $exceptionsBook.Close($false); $exceptionsBook=$null
-    $verification=[ordered]@{version=1;status='PASS';client_name=$clientName;intake_id=[string]$payload.intake_id;template_sha256=Get-Sha256 $TemplatePath;payload_sha256=Get-Sha256 $PayloadPath;catalog_sha256=Get-Sha256 $catalogTemp;exceptions_sha256=Get-Sha256 $exceptionsTemp;retained_last_row=$retainedLastRow;first_new_row=$firstNewRow;final_row=$finalRow;new_item_count=$catalogRows.Count;exception_count=$exceptionRows.Count;retained_locations_preserved=$true;retained_displayed_fills_preserved=$true;retained_fill_method='excel-materialized-format-snapshot';historical_action_column_preserved=$templateHasActionColumn;new_location='Storage';actions=@('SELL','DONATE','REVIEW','CONFIRM DONATION')}
+    $verification=[ordered]@{version=2;status='PASS';client_name=$clientName;intake_id=[string]$payload.intake_id;template_sha256=Get-Sha256 $TemplatePath;payload_sha256=Get-Sha256 $PayloadPath;catalog_sha256=Get-Sha256 $catalogTemp;exceptions_sha256=Get-Sha256 $exceptionsTemp;retained_last_row=$retainedLastRow;first_new_row=$firstNewRow;final_row=$finalRow;new_item_count=$catalogRows.Count;exception_count=$exceptionRows.Count;research_review_count=$researchRows.Count;research_evidence_count=$evidenceRows.Count;retained_locations_preserved=$true;retained_displayed_fills_preserved=$true;retained_fill_method='excel-materialized-format-snapshot';historical_action_column_preserved=$templateHasActionColumn;new_location='Storage';actions=@('SELL','DONATE','REVIEW','CONFIRM DONATION')}
     $verification | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $verificationTemp -Encoding utf8
     $catalogPublished=$false; $exceptionsPublished=$false; $verificationPublished=$false
     try {

@@ -101,6 +101,49 @@ class PricingPolicyTests(unittest.TestCase):
         self.assertEqual(result["comp_count"], 2)
         self.assertEqual(result["decision"], "SELL")
 
+    def test_floor_at_49_50_rounds_to_controlled_sell(self):
+        result = synthesize(item([
+            comp(1, 55, marketplace="ebay", match="near"),
+            comp(2, 55, marketplace="etsy", match="near"),
+            comp(3, 125, marketplace="etsy", match="near"),
+        ]))
+        self.assertEqual(result["decision_floor"], 49.5)
+        self.assertEqual(result["decision"], "SELL")
+        self.assertEqual(result["decision_rule"], "rounded_floor_50")
+        self.assertGreaterEqual(result["ebay_price"], 50)
+
+    def test_stable_two_comp_observed_floor_can_sell_at_50(self):
+        result = synthesize(item([
+            comp(1, 50, marketplace="etsy", match="near"),
+            comp(2, 69, marketplace="etsy", match="near"),
+        ]))
+        self.assertEqual(result["decision"], "SELL")
+        self.assertEqual(result["decision_rule"], "stable_two_comp_floor_50")
+
+    def test_tight_active_pair_bracketing_50_uses_test_listing(self):
+        result = synthesize(item([
+            comp(1, 42, marketplace="etsy", match="near"),
+            comp(2, 52.99, marketplace="etsy", match="near"),
+        ]))
+        self.assertEqual(result["decision"], "SELL")
+        self.assertEqual(result["ebay_price"], 50)
+        self.assertEqual(result["decision_rule"], "controlled_active_bracket_50")
+
+    def test_wide_active_pair_does_not_use_bracket_exception(self):
+        result = synthesize(item([
+            comp(1, 41.51, marketplace="etsy", match="near"),
+            comp(2, 157.31, marketplace="etsy", match="near"),
+        ]))
+        self.assertEqual(result["decision"], "CONFIRM DONATION")
+        self.assertNotEqual(result["decision_rule"], "controlled_active_bracket_50")
+
+    def test_controlled_sell_exceptions_still_require_good_identity(self):
+        result = synthesize(item([
+            comp(1, 50, marketplace="etsy", match="near"),
+            comp(2, 69, marketplace="etsy", match="near"),
+        ], identity="tentative"))
+        self.assertEqual(result["decision"], "REVIEW")
+
 
 if __name__ == "__main__":
     unittest.main()
