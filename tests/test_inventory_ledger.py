@@ -338,6 +338,27 @@ class InventoryLedgerTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("spreadsheet formula prefix", result.stderr)
 
+    def test_provisional_price_can_sell_on_confident_decision_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            batch = temp / "batch.json"
+            candidate = item("a-001")
+            candidate.update(
+                price_type="provisional",
+                valuation_basis="active_market_decision_floor",
+                valuation_confidence="low",
+                decision_confidence="high",
+                listing_status="DRAFT",
+                human_review_status="PENDING",
+                approved_by="",
+                approved_at="",
+            )
+            batch.write_text(json.dumps([candidate]), encoding="utf-8")
+            result = self.run_script(
+                "upsert", "--ledger", temp / "inventory.csv", "--input", batch
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_planned_testing_uses_working_value_without_review(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)

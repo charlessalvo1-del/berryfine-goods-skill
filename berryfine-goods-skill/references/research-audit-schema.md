@@ -1,10 +1,48 @@
 # Structured research audit
 
-## v2.8 price-first marketplace pilot
+## v2.9 adaptive-age marketplace pilot
 
-New and re-run intakes use `research_policy_version=2.8.0-pilot` and `scripts/price_first_gate.py`. Record `price_synthesis.method=weighted_marketplace_median`, `price_type`, the supported low/mid/high interval, decision basis, Etsy and eBay recommendations, and the independently calculated pricing confidence.
+New and re-run intakes use `research_policy_version=2.9.0-pilot` and `scripts/price_first_gate.py`. Record `price_synthesis.method=weighted_marketplace_median`, `price_type`, the supported low/mid/high interval, decision basis, conservative decision floor, Etsy and eBay recommendations, pricing confidence, and decision confidence.
 
-The research population must exactly match the ledger. Included evidence remains limited to verified direct exact/near Etsy or eBay pages; auctions are identification-only. Price issuance does not authorize listing or publication, and every AI-created row remains DRAFT/PENDING. `scripts/adaptive_market_gate.py` remains available only for sealed v2.7 records.
+The research population must exactly match the ledger. An included active comp requires `availability_status=available`; a sold/completed comp requires `sale_date`. Every included comp requires `seller_key`, nonempty `matched_attributes`, `mismatched_attributes`, and a direct evidence capture. Exact comps cannot contain material mismatches. Sold evidence is time-weighted through 36 months; older rare evidence requires current active corroboration. Auctions are identification-only. Price issuance does not authorize listing or publication, and every AI-created row remains DRAFT/PENDING.
+
+Record exactly 6, 8, or 10 attempts. The gate reports total and average attempts, maximum attempts, ten-search count, average opened pages, and valid comps per search. Evidence processing never counts as another search. Stop at six for HIGH price or decision confidence; use seven-eight only for unresolved identity, evidence, or threshold questions; reserve nine-ten for plausible high-value, rare, regulated, collector-significant, or materially misidentified candidates.
+
+Each included v2.9 comparable adds these fields to the common direct-evidence fields:
+
+```json
+{
+  "listing_status": "active",
+  "availability_status": "available",
+  "sale_date": null,
+  "seller_key": "marketplace-stable-seller-key",
+  "matched_attributes": ["maker", "model", "size", "quantity"],
+  "mismatched_attributes": [],
+  "comparability": "exact"
+}
+```
+
+Sold/completed evidence replaces the null with a verified ISO `sale_date`. The synthesis object uses:
+
+```json
+{
+  "method": "weighted_marketplace_median",
+  "price_type": "provisional",
+  "market_value_low": 99.0,
+  "market_value_mid": 169.0,
+  "market_value_high": 475.0,
+  "decision_basis_value": 175.0,
+  "decision_floor": 120.6,
+  "etsy_price": 160.0,
+  "ebay_price": 175.0,
+  "pricing_confidence": "low",
+  "decision_confidence": "high"
+}
+```
+
+## v2.8 price-first marketplace pilot (legacy replay)
+
+Sealed v2.8 records retain their original policy label and may be inspected or non-destructively replayed, but they do not satisfy the v2.9 current-research gate.
 
 ## v2.7 adaptive marketplace pilot (legacy validation)
 

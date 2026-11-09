@@ -48,8 +48,8 @@ Top-level client and intake values fill missing item values. Item-level values t
 | `storage_location` | optional | Storage unit, zone, bin, rack, or staging position |
 | `dimensions` | optional | Verified item measurements |
 | `materials` | optional | Visible or verified materials |
-| `comp_count` | required | Number of usable completed-sale comps |
-| `comp_summary` | required | Compact synthesis of relevant sold evidence |
+| `comp_count` | required | Number of usable direct sold and/or active pricing comps |
+| `comp_summary` | required | Compact synthesis of relevant pricing evidence |
 | `comp_urls` | optional | Semicolon-separated direct evidence URLs |
 | `currency` | required | ISO currency code; default `USD` |
 | `market_value_low` | conditional | Supported lower market estimate; required for `SELL`, `DONATE`, or `CONFIRM DONATION` |
@@ -58,6 +58,7 @@ Top-level client and intake values fill missing item values. Item-level values t
 | `decision_basis_value` | conditional | Supported value used for the $40 donation-confirmation band and $50 sell threshold |
 | `valuation_basis` | conditional | Evidence class used for valuation |
 | `valuation_confidence` | conditional | `low`, `medium`, or `high` |
+| `decision_confidence` | conditional | Independent `low`, `medium`, or `high` confidence that the disposition threshold is resolved |
 | `price_type` | conditional | `market`, `provisional`, `operational`, or `unpriced` |
 | `ebay_price` | optional | Recommended initial eBay price |
 | `local_price` | optional | Recommended local-market price |
@@ -90,8 +91,8 @@ Top-level client and intake values fill missing item values. Item-level values t
 - Do not store image binaries or private contact data in the ledger.
 - Do not reuse an `item_id` for a different physical item.
 - Use the same `item_id` to revise research, condition, or listing status.
-- Under v2.8, keep price issuance independent from disposition. `market` means medium/high-confidence direct evidence; `provisional` means low-confidence direct evidence; `operational` is the explicit zero-comp $45 staff-handling price and is not a market-value claim; `unpriced` means no responsible price was possible.
-- Automatically `SELL` only a confirmed/probable, safety-clear `market` item whose recommended price is at least $55. Automatically `DONATE` only a `market` item whose credible high value is below $40. Use `CONFIRM DONATION` for an eligible $40-$49.99 recommendation or operational $45 handling price. Low-confidence provisional prices outside that band remain `REVIEW` but retain the issued price.
+- Under v2.9, keep pricing confidence independent from decision confidence. `market` means stable medium/high-confidence pricing; `provisional` means the numeric price remains imprecise; `operational` is the explicit zero-comp $45 staff-handling price and is not a market-value claim; `unpriced` means no responsible price was possible.
+- Automatically `SELL` only a confirmed/probable, safety-clear item whose conservative decision floor reaches $55 with medium/high decision confidence. A provisional price may support SELL when its conservative floor is decisive. Automatically `DONATE` only a `market` item whose complete credible range is below $40. Use `CONFIRM DONATION` for an eligible $40-$49.99 recommendation or operational $45 handling price.
 - A new `CONFIRM DONATION` row must use confirmation status `PENDING`, include `Confirm this item will not be sold before donation or rehoming.` in `decision_rationale`, and remain `DRAFT` and human-review `PENDING`.
 - Resolve the band to `DONATE` only with status `CONFIRMED`, `donation_confirmed_by`, a valid ISO `donation_confirmed_at`, and `listing_status=DO_NOT_LIST`. Resolve it to `SELL` only with status `DECLINED`, the same human record, and an explicit `decision_override_reason`.
 - Keep the $50 sell threshold separate from the $125 auction-candidate routing rule.
@@ -111,8 +112,8 @@ Require:
 - confidence is `confirmed` or `probable`
 - condition is not `unknown`
 - at least one cited comparable
-- valuation basis is `sold_comparables`, `auction_results`, or `expert_reference`
-- valuation confidence is `medium` or `high`
+- valuation basis is an allowed direct sold, time-weighted, active-market, or expert evidence class
+- decision confidence is `medium` or `high`; numeric valuation confidence may be low when a conservative floor still makes SELL decisive
 - a recommended price
 - title and description
 - `safety_status` is `CLEAR`

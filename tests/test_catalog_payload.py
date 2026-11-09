@@ -14,7 +14,7 @@ class CatalogPayloadTests(unittest.TestCase):
     def test_builds_current_rows_and_empty_headed_exception_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); batch = root / "batch.json"; ledger = root / "ledger.csv"
-            item = {"client_id": "client-a", "client_name": "Client A", "intake_id": "intake-a", "item_id": "item-a", "quantity": 1, "category": "Collectible", "identified_name": "Verified item", "identification_confidence": "confirmed", "identification_basis": "Visible model label", "visible_markings": "Model A", "condition_grade": "good", "condition_notes": "Light wear", "photo_refs": "IMG_1.jpg", "comp_count": 3, "comp_summary": "Three exact sold comparables", "comp_urls": ["https://example.com/sold-1", "https://example.com/sold-2", "https://example.com/sold-3"], "currency": "USD", "market_value_low": 70, "market_value_mid": 75, "market_value_high": 80, "decision_basis_value": 75, "valuation_basis": "sold_comparables", "valuation_confidence": "medium", "ebay_price": 79, "local_price": 70, "quick_sale_price": 60, "decision": "SELL", "decision_rationale": "Supported value meets the $50 threshold.", "donation_confirmation_status": "NOT_REQUIRED", "listing_status": "DRAFT", "human_review_status": "PENDING", "safety_status": "CLEAR", "research_date": "2026-08-02"}
+            item = {"client_id": "client-a", "client_name": "Client A", "intake_id": "intake-a", "item_id": "item-a", "quantity": 1, "category": "Collectible", "identified_name": "Verified item", "identification_confidence": "confirmed", "identification_basis": "Visible model label", "visible_markings": "Model A", "condition_grade": "good", "condition_notes": "Light wear", "photo_refs": "IMG_1.jpg", "comp_count": 3, "comp_summary": "Three exact sold comparables", "comp_urls": ["https://example.com/sold-1", "https://example.com/sold-2", "https://example.com/sold-3"], "currency": "USD", "market_value_low": 70, "market_value_mid": 75, "market_value_high": 80, "decision_basis_value": 75, "valuation_basis": "sold_comparables", "valuation_confidence": "medium", "decision_confidence": "high", "ebay_price": 79, "local_price": 70, "quick_sale_price": 60, "decision": "SELL", "decision_rationale": "Supported value meets the $50 threshold.", "donation_confirmation_status": "NOT_REQUIRED", "listing_status": "DRAFT", "human_review_status": "PENDING", "safety_status": "CLEAR", "research_date": "2026-08-02"}
             batch.write_text(json.dumps({"items": [item]}), encoding="utf-8")
             revisions = root / "item-revisions.jsonl"
             upsert = subprocess.run([sys.executable, str(SCRIPTS / "inventory_ledger.py"), "upsert", "--ledger", str(ledger), "--input", str(batch), "--audit-log", str(revisions)], text=True, capture_output=True)
@@ -33,7 +33,7 @@ class CatalogPayloadTests(unittest.TestCase):
             gate = subprocess.run([sys.executable, str(SCRIPTS / "research_gate.py"), "--research", str(research), "--ledger", str(ledger), "--intake-id", "intake-a", "--output", str(verification)], text=True, capture_output=True)
             self.assertEqual(gate.returncode, 0, gate.stderr)
             verification_value = json.loads(verification.read_text(encoding="utf-8"))
-            verification_value["research_policy_version"] = "2.8.0-pilot"
+            verification_value["research_policy_version"] = "2.9.0-pilot"
             verification.write_text(json.dumps(verification_value), encoding="utf-8")
             grouping = root / "grouping.json"; grouping.write_text(json.dumps({"client_id": "client-a", "intake_id": "intake-a", "groups": [{"item_id": "item-a", "sku": "BB1", "group_id": "BB1 - Verified item"}]}), encoding="utf-8")
             output = root / "catalog-payload.json"
@@ -49,7 +49,7 @@ class CatalogPayloadTests(unittest.TestCase):
             stale_verification.write_text(json.dumps(stale_value), encoding="utf-8")
             stale = subprocess.run([sys.executable, str(SCRIPTS / "catalog_payload.py"), "--ledger", str(ledger), "--grouping", str(grouping), "--research-verification", str(stale_verification), "--intake-id", "intake-a", "--client-name", "Client A", "--output", str(root / "stale-payload.json")], text=True, capture_output=True)
             self.assertEqual(stale.returncode, 2)
-            self.assertIn("policy version 2.8.0-pilot", stale.stderr)
+            self.assertIn("policy version 2.9.0-pilot", stale.stderr)
 
 
 if __name__ == "__main__":

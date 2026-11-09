@@ -13,7 +13,7 @@ from bfg_integrity import atomic_write_json, sha256_file, sha256_json
 from inventory_ledger import InventoryError, read_ledger, validate_row
 
 
-REQUIRED_RESEARCH_POLICY_VERSION = "2.8.0-pilot"
+REQUIRED_RESEARCH_POLICY_VERSION = "2.9.0-pilot"
 
 
 class CatalogPayloadError(ValueError):
@@ -54,7 +54,7 @@ def history(row: dict[str, str]) -> str:
         f"{row['decision']}. {row['identified_name']}.",
         f"Condition: {row['condition_grade']}; {row['condition_notes']}",
         f"Identification: {row['identification_confidence']}; {row['identification_basis']}",
-        f"Valuation: price type {row.get('price_type') or 'legacy'}; confidence {row.get('valuation_confidence') or 'not recorded'}. {row['comp_summary']} Supported range {row['currency']} {supported_range}; eBay {row.get('ebay_price') or 'n/a'}, local {row.get('local_price') or 'n/a'}, quick sale {row.get('quick_sale_price') or 'n/a'}.",
+        f"Valuation: price type {row.get('price_type') or 'legacy'}; pricing confidence {row.get('valuation_confidence') or 'not recorded'}; decision confidence {row.get('decision_confidence') or 'not recorded'}. {row['comp_summary']} Supported range {row['currency']} {supported_range}; eBay {row.get('ebay_price') or 'n/a'}, local {row.get('local_price') or 'n/a'}, quick sale {row.get('quick_sale_price') or 'n/a'}.",
     ]
     if row.get("testing_status") == "PLANNED":
         sections.append(f"Testing planned: tested-working value {row['value_if_tested_working']}; untested value {row['value_if_untested']}. {row['testing_notes']}")

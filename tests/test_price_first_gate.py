@@ -7,7 +7,11 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "berryfine-goods-skill" / "scrip
 sys.path.insert(0, str(SCRIPTS))
 
 from adaptive_market_gate import GateError  # noqa: E402
-from price_first_gate import validate_item  # noqa: E402
+from price_first_gate import (  # noqa: E402
+    MAX_BULK_AVERAGE_SEARCHES,
+    MAX_BULK_TEN_SEARCH_SHARE,
+    validate_item,
+)
 from pricing_policy import synthesize  # noqa: E402
 
 
@@ -56,6 +60,10 @@ class PriceFirstGateTests(unittest.TestCase):
                     "captured_at": "2026-11-09T10:00:00-05:00",
                     "evidence_sha256": f"{index:064x}",
                     "direct_page_verified": True,
+                    "availability_status": "available",
+                    "matched_attributes": ["maker", "model", "size"],
+                    "mismatched_attributes": [],
+                    "seller_key": f"seller-{index}",
                     "quantity": 1,
                     "normalized_unit_total_usd": price,
                 }
@@ -72,6 +80,9 @@ class PriceFirstGateTests(unittest.TestCase):
         item["price_synthesis"] = {
             "method": "weighted_marketplace_median",
             "price_type": result["price_type"],
+            "decision_floor": result["decision_floor"],
+            "pricing_confidence": result["pricing_confidence"],
+            "decision_confidence": result["decision_confidence"],
             **{field: result[field] for field in ("market_value_low", "market_value_mid", "market_value_high", "decision_basis_value", "etsy_price", "ebay_price")},
         }
         ledger = {
@@ -79,6 +90,7 @@ class PriceFirstGateTests(unittest.TestCase):
             "price_type": result["price_type"],
             "valuation_basis": result["valuation_basis"],
             "valuation_confidence": result["pricing_confidence"],
+            "decision_confidence": result["decision_confidence"],
             "decision": result["decision"],
             "comp_count": str(result["comp_count"]),
             **{field: str(result[field]) for field in ("market_value_low", "market_value_mid", "market_value_high", "decision_basis_value", "ebay_price")},
@@ -96,6 +108,10 @@ class PriceFirstGateTests(unittest.TestCase):
         ledger["ebay_price"] = "999"
         with self.assertRaisesRegex(GateError, "not reproducible"):
             validate_item(item, ledger)
+
+    def test_bulk_search_budget_matches_rothschild_baseline(self):
+        self.assertAlmostEqual(MAX_BULK_AVERAGE_SEARCHES, 972 / 115)
+        self.assertEqual(MAX_BULK_TEN_SEARCH_SHARE, 0.2261)
 
 
 if __name__ == "__main__":

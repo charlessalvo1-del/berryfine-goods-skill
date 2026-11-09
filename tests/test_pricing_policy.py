@@ -10,14 +10,20 @@ from pricing_policy import synthesize  # noqa: E402
 
 
 def comp(number, price, *, marketplace="ebay", status="active", match="exact"):
-    return {
+    value = {
         "comp_id": f"c{number}",
         "marketplace": marketplace,
         "listing_status": status,
         "comparability": match,
         "included": True,
         "normalized_unit_total_usd": price,
+        "captured_at": "2026-11-09T10:00:00-05:00",
+        "availability_status": "available" if status == "active" else "sold",
+        "title": "Verified exact item",
     }
+    if status in {"sold", "completed"}:
+        value["sale_date"] = "2026-08-01"
+    return value
 
 
 def item(comps=(), *, identity="confirmed", staff=False):
@@ -25,6 +31,7 @@ def item(comps=(), *, identity="confirmed", staff=False):
         "pricing_comparables": list(comps),
         "identification_assessment": {"confidence": identity, "basis": "visible evidence"},
         "search_completion": {"stop_tier": 8, "staff_boundary_decision": staff},
+        "valuation_date": "2026-11-09",
     }
 
 
@@ -69,6 +76,30 @@ class PricingPolicyTests(unittest.TestCase):
         ]
         result = synthesize(item(comps))
         self.assertEqual(result["pricing_confidence"], "high")
+
+    def test_active_only_floor_can_authorize_sell_without_precise_price(self):
+        result = synthesize(item([comp(1, 99), comp(2, 169), comp(3, 475)]))
+        self.assertEqual(result["pricing_confidence"], "low")
+        self.assertEqual(result["decision"], "SELL")
+        self.assertEqual(result["decision_confidence"], "high")
+        self.assertGreaterEqual(result["decision_floor"], 55)
+
+    def test_unavailable_active_listing_is_excluded(self):
+        unavailable = comp(1, 15, marketplace="etsy", match="near")
+        unavailable["title"] = "This item is unavailable - Etsy"
+        result = synthesize(item([unavailable, comp(2, 100), comp(3, 130, marketplace="etsy")]))
+        self.assertEqual(result["comp_count"], 2)
+        self.assertEqual(result["excluded_pricing_comps"], 1)
+        self.assertEqual(result["decision"], "SELL")
+
+    def test_old_rare_sale_needs_current_active_corroboration(self):
+        old_sale = comp(1, 100, status="sold")
+        old_sale["sale_date"] = "2022-01-01"
+        rare = item([old_sale, comp(2, 110, marketplace="etsy")])
+        rare["rarity_assessment"] = {"classification": "rare"}
+        result = synthesize(rare)
+        self.assertEqual(result["comp_count"], 2)
+        self.assertEqual(result["decision"], "SELL")
 
 
 if __name__ == "__main__":

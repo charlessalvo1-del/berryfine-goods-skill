@@ -18,17 +18,19 @@ class ReleaseContractTests(unittest.TestCase):
         new_scripts = {path.name for path in (SKILL / "scripts").iterdir()}
         self.assertFalse({"warehouse.py", "movement.py", "container_tracking.py"} & new_scripts)
 
-    def test_version_is_two_point_eight_zero(self) -> None:
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.8.0")
+    def test_version_is_two_point_nine_zero(self) -> None:
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.9.0")
 
-    def test_v2_8_price_first_policy_is_documented(self) -> None:
+    def test_v2_9_adaptive_age_policy_is_documented(self) -> None:
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8-sig")
         for required in (
             "adaptive `6 / 8 / 10` search ladder",
             "$40-$50 STAFF DECISION",
             "Auction data is identification-only",
             "weighted-median anchor",
-            "SELL requires a market price of at least $55",
+            "conservative decision floor",
+            "three years",
+            "decision confidence",
             "scripts/price_first_gate.py",
         ):
             self.assertIn(required, text)

@@ -56,6 +56,7 @@ FIELDS = [
     "decision_basis_value",
     "valuation_basis",
     "valuation_confidence",
+    "decision_confidence",
     "price_type",
     "ebay_price",
     "local_price",
@@ -146,9 +147,12 @@ ENUMS = {
         "expert_reference",
         "insufficient_evidence",
         "weighted_marketplace_prices",
+        "time_weighted_marketplace_prices",
+        "active_market_decision_floor",
         "operational_staff_price",
     },
     "valuation_confidence": {"", "low", "medium", "high"},
+    "decision_confidence": {"", "low", "medium", "high"},
     "price_type": {"", "market", "provisional", "operational", "unpriced"},
     "triage_lane": {
         "",
@@ -181,6 +185,8 @@ READY_VALUATION_BASES = {
     "auction_results",
     "expert_reference",
     "weighted_marketplace_prices",
+    "time_weighted_marketplace_prices",
+    "active_market_decision_floor",
 }
 NON_SELL_CONFIRMATION = "confirm this item will not be sold"
 NEW_OPTIONAL_FIELDS = {
@@ -194,6 +200,7 @@ NEW_OPTIONAL_FIELDS = {
     "donation_confirmed_at",
     "donation_confirmation_notes",
     "price_type",
+    "decision_confidence",
 }
 
 
@@ -351,12 +358,19 @@ def validate_row(
                 raise InventoryError(f"{label} operational price must be $40/$45/$49.99 with $45 basis")
             if row["valuation_basis"] != "operational_staff_price" or row["valuation_confidence"] != "low":
                 raise InventoryError(f"{label} operational price requires operational_staff_price and low confidence")
+            if row["decision_confidence"] not in {"medium", "high"}:
+                raise InventoryError(f"{label} operational price requires medium or high decision confidence")
         elif not identity_eligible or not safety_eligible:
             required_decision = "REVIEW"
         elif price_type == "provisional":
-            required_decision = "CONFIRM DONATION" if basis_value is not None and 40 <= basis_value < 50 else "REVIEW"
             if row["valuation_confidence"] != "low":
                 raise InventoryError(f"{label} provisional price requires low confidence")
+            if basis_value is not None and 40 <= basis_value < 50:
+                required_decision = "CONFIRM DONATION"
+            elif basis_value is not None and basis_value >= 55 and row["decision_confidence"] in {"medium", "high"}:
+                required_decision = "SELL"
+            else:
+                required_decision = "REVIEW"
         else:
             if row["valuation_confidence"] not in {"medium", "high"}:
                 raise InventoryError(f"{label} market price requires medium or high confidence")
@@ -364,7 +378,7 @@ def validate_row(
                 required_decision = "DONATE"
             elif basis_value is not None and 40 <= basis_value < 50:
                 required_decision = "CONFIRM DONATION"
-            elif basis_value is not None and basis_value >= 55:
+            elif basis_value is not None and basis_value >= 55 and row["decision_confidence"] in {"medium", "high"}:
                 required_decision = "SELL"
             else:
                 required_decision = "REVIEW"
@@ -483,8 +497,9 @@ def validate_row(
             ready_missing.append("testing completed or not required")
         if row["valuation_basis"] not in READY_VALUATION_BASES:
             ready_missing.append("completed-sale, auction, or expert valuation evidence")
-        if row["valuation_confidence"] not in {"medium", "high"}:
-            ready_missing.append("medium or high valuation confidence")
+        legacy_confident = not row.get("price_type") and row["valuation_confidence"] in {"medium", "high"}
+        if row["decision_confidence"] not in {"medium", "high"} and not legacy_confident:
+            ready_missing.append("medium or high decision confidence")
         if numbers.get("comp_count", 0) < 1 or not row["comp_urls"]:
             ready_missing.append("at least one cited comparable")
         if not row["approved_by"] or not row["approved_at"]:
