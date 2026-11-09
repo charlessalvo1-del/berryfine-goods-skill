@@ -30,7 +30,7 @@ REQUIRED_RECORDS = {
     "catalog_verification": "catalog-verification.json",
 }
 ALLOWED_DECISIONS = ("SELL", "DONATE", "CONFIRM DONATION", "REVIEW")
-REQUIRED_RESEARCH_POLICY_VERSION = "2.7.0-pilot"
+REQUIRED_RESEARCH_POLICY_VERSION = "2.8.0-pilot"
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -176,7 +176,7 @@ def legacy_audit(args: argparse.Namespace) -> dict[str, Any]:
         value = float(row.get("decision_basis_value") or 0)
         if 40 <= value < 50 and row.get("decision") not in {"CONFIRM DONATION", "REVIEW"}:
             findings.append({"code": "BORDERLINE_POLICY_VIOLATION", "message": f"{row.get('item_id')} uses {row.get('decision')} at ${value:.2f}."})
-        if row.get("decision") != "REVIEW" and (row.get("valuation_basis") == "insufficient_evidence" or row.get("valuation_confidence") == "low") and row.get("decision") in {"DONATE", "CONFIRM DONATION"}:
+        if row.get("decision") != "REVIEW" and (row.get("valuation_basis") == "insufficient_evidence" or row.get("valuation_confidence") == "low") and row.get("decision") in {"DONATE", "CONFIRM DONATION"} and row.get("price_type") != "operational":
             findings.append({"code": "UNSUPPORTED_DISPOSITION", "message": f"{row.get('item_id')} has a disposal-sensitive decision without sufficient evidence."})
     if args.catalog.parent.resolve() != args.exceptions.parent.resolve():
         findings.append({"code": "SPLIT_DELIVERY_LOCATION", "message": "Catalog and Exceptions workbook are not in the same main client folder."})

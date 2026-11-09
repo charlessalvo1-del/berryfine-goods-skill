@@ -56,6 +56,7 @@ FIELDS = [
     "decision_basis_value",
     "valuation_basis",
     "valuation_confidence",
+    "price_type",
     "ebay_price",
     "local_price",
     "quick_sale_price",
@@ -144,8 +145,11 @@ ENUMS = {
         "price_guide",
         "expert_reference",
         "insufficient_evidence",
+        "weighted_marketplace_prices",
+        "operational_staff_price",
     },
     "valuation_confidence": {"", "low", "medium", "high"},
+    "price_type": {"", "market", "provisional", "operational", "unpriced"},
     "triage_lane": {
         "",
         "Auction Candidate",
@@ -172,7 +176,12 @@ NUMERIC_FIELDS = {
 }
 
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-READY_VALUATION_BASES = {"sold_comparables", "auction_results", "expert_reference"}
+READY_VALUATION_BASES = {
+    "sold_comparables",
+    "auction_results",
+    "expert_reference",
+    "weighted_marketplace_prices",
+}
 NON_SELL_CONFIRMATION = "confirm this item will not be sold"
 NEW_OPTIONAL_FIELDS = {
     "condition_basis",
@@ -184,6 +193,7 @@ NEW_OPTIONAL_FIELDS = {
     "donation_confirmed_by",
     "donation_confirmed_at",
     "donation_confirmation_notes",
+    "price_type",
 }
 
 
@@ -327,7 +337,40 @@ def validate_row(
     range_high = numbers.get("market_value_high")
     has_supported_range = range_low is not None and range_high is not None
 
-    if enforce_current_policy and has_supported_range:
+    if enforce_current_policy and row.get("price_type"):
+        price_type = row["price_type"]
+        identity_eligible = row["identification_confidence"] in {"confirmed", "probable"}
+        safety_eligible = row["safety_status"] == "CLEAR"
+        if price_type == "unpriced":
+            required_decision = "REVIEW"
+            if has_supported_range or basis_value is not None:
+                raise InventoryError(f"{label} unpriced items cannot contain value estimates")
+        elif price_type == "operational":
+            required_decision = "CONFIRM DONATION" if identity_eligible and safety_eligible else "REVIEW"
+            if (range_low, numbers.get("market_value_mid"), range_high, basis_value) != (40.0, 45.0, 49.99, 45.0):
+                raise InventoryError(f"{label} operational price must be $40/$45/$49.99 with $45 basis")
+            if row["valuation_basis"] != "operational_staff_price" or row["valuation_confidence"] != "low":
+                raise InventoryError(f"{label} operational price requires operational_staff_price and low confidence")
+        elif not identity_eligible or not safety_eligible:
+            required_decision = "REVIEW"
+        elif price_type == "provisional":
+            required_decision = "CONFIRM DONATION" if basis_value is not None and 40 <= basis_value < 50 else "REVIEW"
+            if row["valuation_confidence"] != "low":
+                raise InventoryError(f"{label} provisional price requires low confidence")
+        else:
+            if row["valuation_confidence"] not in {"medium", "high"}:
+                raise InventoryError(f"{label} market price requires medium or high confidence")
+            if range_high is not None and range_high < 40:
+                required_decision = "DONATE"
+            elif basis_value is not None and 40 <= basis_value < 50:
+                required_decision = "CONFIRM DONATION"
+            elif basis_value is not None and basis_value >= 55:
+                required_decision = "SELL"
+            else:
+                required_decision = "REVIEW"
+        if row["decision"] != required_decision:
+            raise InventoryError(f"{label} {price_type} pricing requires {required_decision}; got {row['decision']}")
+    elif enforce_current_policy and has_supported_range:
         if range_high < 40:
             required_decision = "DONATE"
         elif range_low >= 40 and range_high < 50:
@@ -375,6 +418,19 @@ def validate_row(
         raise InventoryError(
             f"{label} CONFIRM DONATION requires an entire supported range from $40 through $49.99"
         )
+
+    if enforce_current_policy and row["decision"] == "CONFIRM DONATION":
+        if NON_SELL_CONFIRMATION not in row["decision_rationale"].casefold():
+            raise InventoryError(f"{label} CONFIRM DONATION must state: Confirm this item will not be sold before donation or rehoming.")
+        if row["donation_confirmation_status"] != "PENDING":
+            raise InventoryError(f"{label} CONFIRM DONATION requires donation_confirmation_status PENDING")
+        if row["listing_status"] != "DRAFT" or row["human_review_status"] != "PENDING":
+            raise InventoryError(f"{label} CONFIRM DONATION must remain DRAFT and PENDING")
+    elif enforce_current_policy and row.get("price_type"):
+        if row["donation_confirmation_status"] not in {"", "NOT_REQUIRED"}:
+            raise InventoryError(f"{label} non-confirmation decision cannot have a pending donation state")
+        if row["donation_confirmed_by"] or row["donation_confirmed_at"]:
+            raise InventoryError(f"{label} non-confirmation decision cannot have donation confirmer metadata")
     elif not enforce_current_policy:
         if row["decision"] == "SELL" and basis_value is not None and basis_value < 40:
             if not row["decision_override_reason"]:

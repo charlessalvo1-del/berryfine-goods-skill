@@ -1,8 +1,14 @@
 # Structured research audit
 
-## v2.7 adaptive marketplace pilot
+## v2.8 price-first marketplace pilot
 
-New and re-run intakes use `research_policy_version=2.7.0-pilot` and `scripts/adaptive_market_gate.py`. The exact research item population must match the ledger population.
+New and re-run intakes use `research_policy_version=2.8.0-pilot` and `scripts/price_first_gate.py`. Record `price_synthesis.method=weighted_marketplace_median`, `price_type`, the supported low/mid/high interval, decision basis, Etsy and eBay recommendations, and the independently calculated pricing confidence.
+
+The research population must exactly match the ledger. Included evidence remains limited to verified direct exact/near Etsy or eBay pages; auctions are identification-only. Price issuance does not authorize listing or publication, and every AI-created row remains DRAFT/PENDING. `scripts/adaptive_market_gate.py` remains available only for sealed v2.7 records.
+
+## v2.7 adaptive marketplace pilot (legacy validation)
+
+Sealed v2.7 intakes retain `research_policy_version=2.7.0-pilot` and are validated with `scripts/adaptive_market_gate.py`. The exact research item population must match the ledger population.
 
 ```json
 {

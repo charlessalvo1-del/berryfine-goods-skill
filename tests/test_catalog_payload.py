@@ -33,7 +33,7 @@ class CatalogPayloadTests(unittest.TestCase):
             gate = subprocess.run([sys.executable, str(SCRIPTS / "research_gate.py"), "--research", str(research), "--ledger", str(ledger), "--intake-id", "intake-a", "--output", str(verification)], text=True, capture_output=True)
             self.assertEqual(gate.returncode, 0, gate.stderr)
             verification_value = json.loads(verification.read_text(encoding="utf-8"))
-            verification_value["research_policy_version"] = "2.7.0-pilot"
+            verification_value["research_policy_version"] = "2.8.0-pilot"
             verification.write_text(json.dumps(verification_value), encoding="utf-8")
             grouping = root / "grouping.json"; grouping.write_text(json.dumps({"client_id": "client-a", "intake_id": "intake-a", "groups": [{"item_id": "item-a", "sku": "BB1", "group_id": "BB1 - Verified item"}]}), encoding="utf-8")
             output = root / "catalog-payload.json"
@@ -49,7 +49,7 @@ class CatalogPayloadTests(unittest.TestCase):
             stale_verification.write_text(json.dumps(stale_value), encoding="utf-8")
             stale = subprocess.run([sys.executable, str(SCRIPTS / "catalog_payload.py"), "--ledger", str(ledger), "--grouping", str(grouping), "--research-verification", str(stale_verification), "--intake-id", "intake-a", "--client-name", "Client A", "--output", str(root / "stale-payload.json")], text=True, capture_output=True)
             self.assertEqual(stale.returncode, 2)
-            self.assertIn("policy version 2.7.0-pilot", stale.stderr)
+            self.assertIn("policy version 2.8.0-pilot", stale.stderr)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ SKILL = ROOT / "berryfine-goods-skill"
 class ReleaseContractTests(unittest.TestCase):
     def test_reliability_release_resources_are_routed_from_skill(self) -> None:
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8-sig")
-        for name in ("photo_quality_gate.py", "review_provenance_gate.py", "apply_grouping.py", "research_gate.py", "adaptive_market_gate.py", "legacy_catalog_refresh.py", "categorized_inventory_gate.py", "catalog_payload.py", "catalog_builder.ps1", "bfg.py", "audit_seal.py", "outcome_ledger.py"):
+        for name in ("photo_quality_gate.py", "review_provenance_gate.py", "apply_grouping.py", "research_gate.py", "adaptive_market_gate.py", "price_first_gate.py", "pricing_policy.py", "pricing_replay.py", "legacy_catalog_refresh.py", "categorized_inventory_gate.py", "catalog_payload.py", "catalog_builder.ps1", "bfg.py", "audit_seal.py", "outcome_ledger.py"):
             self.assertIn(name, text)
             self.assertTrue((SKILL / "scripts" / name).is_file())
 
@@ -18,18 +18,18 @@ class ReleaseContractTests(unittest.TestCase):
         new_scripts = {path.name for path in (SKILL / "scripts").iterdir()}
         self.assertFalse({"warehouse.py", "movement.py", "container_tracking.py"} & new_scripts)
 
-    def test_version_is_two_point_seven_zero(self) -> None:
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.7.0")
+    def test_version_is_two_point_eight_zero(self) -> None:
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.8.0")
 
-    def test_v2_7_adaptive_market_policy_is_documented(self) -> None:
+    def test_v2_8_price_first_policy_is_documented(self) -> None:
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8-sig")
         for required in (
             "adaptive `6 / 8 / 10` search ladder",
             "$40-$50 STAFF DECISION",
             "Auction data is identification-only",
-            "recommended Etsy price = `B * 0.95`",
-            "recommended eBay price = `B * 1.05`",
-            "scripts/adaptive_market_gate.py",
+            "weighted-median anchor",
+            "SELL requires a market price of at least $55",
+            "scripts/price_first_gate.py",
         ):
             self.assertIn(required, text)
 

@@ -58,6 +58,7 @@ Top-level client and intake values fill missing item values. Item-level values t
 | `decision_basis_value` | conditional | Supported value used for the $40 donation-confirmation band and $50 sell threshold |
 | `valuation_basis` | conditional | Evidence class used for valuation |
 | `valuation_confidence` | conditional | `low`, `medium`, or `high` |
+| `price_type` | conditional | `market`, `provisional`, `operational`, or `unpriced` |
 | `ebay_price` | optional | Recommended initial eBay price |
 | `local_price` | optional | Recommended local-market price |
 | `quick_sale_price` | optional | Recommended fast-sale price |
@@ -89,7 +90,8 @@ Top-level client and intake values fill missing item values. Item-level values t
 - Do not store image binaries or private contact data in the ledger.
 - Do not reuse an `item_id` for a different physical item.
 - Use the same `item_id` to revise research, condition, or listing status.
-- For newly created or reappraised rows with supported values, use `SELL` at $50 or more, `CONFIRM DONATION` from $40 through $49.99, and `DONATE` below $40. Use `REVIEW` only for identification, authenticity, safety, policy, grouping, or valuation uncertainty independent of the supported-value band. Grandfather retained historical decisions until they are explicitly reappraised.
+- Under v2.8, keep price issuance independent from disposition. `market` means medium/high-confidence direct evidence; `provisional` means low-confidence direct evidence; `operational` is the explicit zero-comp $45 staff-handling price and is not a market-value claim; `unpriced` means no responsible price was possible.
+- Automatically `SELL` only a confirmed/probable, safety-clear `market` item whose recommended price is at least $55. Automatically `DONATE` only a `market` item whose credible high value is below $40. Use `CONFIRM DONATION` for an eligible $40-$49.99 recommendation or operational $45 handling price. Low-confidence provisional prices outside that band remain `REVIEW` but retain the issued price.
 - A new `CONFIRM DONATION` row must use confirmation status `PENDING`, include `Confirm this item will not be sold before donation or rehoming.` in `decision_rationale`, and remain `DRAFT` and human-review `PENDING`.
 - Resolve the band to `DONATE` only with status `CONFIRMED`, `donation_confirmed_by`, a valid ISO `donation_confirmed_at`, and `listing_status=DO_NOT_LIST`. Resolve it to `SELL` only with status `DECLINED`, the same human record, and an explicit `decision_override_reason`.
 - Keep the $50 sell threshold separate from the $125 auction-candidate routing rule.

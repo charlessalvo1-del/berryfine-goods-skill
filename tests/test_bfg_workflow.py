@@ -50,7 +50,7 @@ class BfgWorkflowTests(unittest.TestCase):
 
     def test_current_audit_contract_requires_research_policy_version(self) -> None:
         text = SCRIPT.read_text(encoding="utf-8-sig")
-        self.assertIn('REQUIRED_RESEARCH_POLICY_VERSION = "2.7.0-pilot"', text)
+        self.assertIn('REQUIRED_RESEARCH_POLICY_VERSION = "2.8.0-pilot"', text)
         self.assertIn('"STALE_RESEARCH_POLICY"', text)
 
     def test_legacy_audit_reproduces_regression_failure_classes(self) -> None:

@@ -11,7 +11,7 @@ Prefer:
 
 Etsy is the preferred pricing surface and eBay is the cross-check. Active and sold prices may be combined when every included page is direct, current, exact or near, normalized to a one-item USD total, and deduplicated. Label active listings as asking prices and sold listings as realized transactions. Auction prices are never valuation inputs; use auction evidence only to identify the object or detect collector significance.
 
-Record the evidence class in `valuation_basis`. Only a qualifying direct Etsy/eBay price set may support a non-`REVIEW` decision under the v2.7 pilot.
+Record the evidence class in `valuation_basis`. Under v2.8, price issuance and disposition are separate: sparse direct evidence may issue a provisional price without authorizing an automatic sale or donation.
 
 Use current web research for every valuation request. Do not reuse old prices without refreshing them.
 
@@ -83,19 +83,23 @@ Prioritize, in order:
 
 Use older sales for rare items when necessary and say why.
 
-## Price synthesis
+## Price-first synthesis
 
 Remove false matches first. Explain meaningful outliers instead of mechanically averaging them.
 
-Require three unique, directly opened exact or near Etsy/eBay prices before any non-`REVIEW` disposition and target four. When enough comps exist:
+Assign evidence weights after removing false matches and duplicates: eBay sold/completed `1.00`, eBay active `0.70`, Etsy sold/completed `0.80`, and Etsy active `0.60`; multiply near matches by `0.85`. Auction, broad, category, search, and snippet evidence receives zero pricing weight.
 
-- `A` is the arithmetic mean of cleaned normalized prices
-- `H80` is 80% of the highest cleaned price
-- `B` is `(A + H80) / 2`, clamped to the cleaned price range
-- Etsy recommendation is `B * 0.95`
-- eBay recommendation is `B * 1.05`
-- use the defensible cleaned cluster for `market_value_low` and `market_value_high`
-- set local and quick-sale prices separately for pickup convenience and speed
+Use the weighted median as the anchor. Clamp Etsy at `anchor * 0.95` and eBay at `anchor * 1.05` to the defensible included-price interval. Record the raw interval, anchor, recommendations, evidence counts, and price type.
+
+- `market` / HIGH: four stable prices including at least two eBay sold/completed records, CV at most 0.25, and ratio at most 1.75
+- `market` / MEDIUM: at least three direct prices, or two exact prices within 35%
+- `provisional` / LOW: one direct price or a weaker/dispersed set; issue the price but do not automatically sell or donate outside the staff band
+- `operational` / LOW: zero prices, confirmed/probable common low-value identity, and an eight-search boundary stop; record $40/$45/$49.99 and state that $45 is operational rather than market value
+- `unpriced` / LOW: no defensible price and no safe operational fallback
+
+Automatic SELL requires a market price, confirmed/probable identity, safety clearance, and eBay recommendation of at least $55. Automatic DONATE requires a market interval wholly below $40. CONFIRM DONATION covers an eligible $40-$49.99 recommendation or the operational $45 handling price. Other provisional, tentative, unsafe, $50-$54.99, or unpriced cases remain REVIEW while retaining any issued price.
+
+The v2.7 cleaned-average formula is retained only for validating sealed v2.7 records. New work uses `scripts/price_first_gate.py` and `research_policy_version=2.8.0-pilot`.
 
 Adjust for positively evidenced condition differences, completeness, testing, authenticity confidence, seasonality, shipping difficulty, and lot size. Do not discount for hypothetical damage or missing condition detail. State material adjustments.
 
@@ -118,7 +122,7 @@ class applies.
 
 `REVIEW` is an outcome after research, not a shortcut around research. Before assigning it for missing identity or comps, complete the applicable 8- or 10-attempt ladder, including image discovery, Etsy, and eBay. Search pages, category indexes, pricing pages, storefront pages, and auction prices do not count as included pricing evidence. Record the closest candidates, why each failed, and the exact next evidence needed. A generic sentence such as "item-specific comparables needed" is not research exhaustion, and the same exhaustion text may not be copied across unrelated items.
 
-Apply disposition thresholds to uncertainty ranges. `DONATE` requires a high bound below $40; `CONFIRM DONATION` requires the entire range to remain within $40-$49.99; `SELL` requires a low bound of at least $50. A range crossing either threshold remains `REVIEW` even when its midpoint falls cleanly into one band.
+Keep the raw comparable interval visible, but use the v2.8 price type, confidence, identity, safety status, and recommended price for disposition. Donation remains conservative: only a medium/high-confidence market interval wholly below $40 may auto-donate.
 
 Do not claim a 90%-97.8% identification or pricing accuracy rate from process compliance alone. Validate identification against independently confirmed labels or experts, validate pricing against realized outcomes, and report price-range coverage plus median absolute percentage error on a held-out sample.
 

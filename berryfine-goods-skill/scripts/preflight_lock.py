@@ -25,7 +25,7 @@ from photo_manifest import (
 
 CATALOG_RULES = {
     "actions": ["SELL", "DONATE", "REVIEW", "CONFIRM DONATION"],
-    "sell_minimum": 50.0,
+    "sell_minimum": 55.0,
     "confirm_donation_minimum": 40.0,
     "confirm_donation_maximum": 49.99,
     "donate_maximum": 39.99,
@@ -42,21 +42,23 @@ CATALOG_RULES = {
     "condition_assumption": "complete, functional, saleable, and typical good used condition unless positive evidence shows otherwise",
     "missing_condition_detail_requires_review": False,
     "planned_testing_valuation_basis": "tested_working",
-    "research_policy_version": "2.7.0-pilot",
+    "research_policy_version": "2.8.0-pilot",
     "research_stop_rule": "adaptive 6/8/10 ladder; stop at six when four defensible prices are stable, use searches seven-eight for challenge, and reserve nine-ten for high-value or unresolved material uncertainty",
-    "low_value_boundary_stop": "after search eight, if evidence still crosses $40 or $50 and the supported high is below $125 with no rare or collector signal, stop and assign REVIEW with operational label $40-$50 STAFF DECISION",
+    "low_value_boundary_stop": "after search eight, a confirmed/probable common low-value zero-comp item may receive a $45 operational handling price and CONFIRM DONATION; this is not a market-value claim",
     "high_value_research_threshold": 125.0,
-    "pricing_primary_source": "Etsy active marketplace listings preferred; eBay active and sold/Product Research used as cross-checks",
+    "pricing_primary_source": "eBay sold/Product Research preferred for realized price; direct eBay and Etsy active listings used for current-market cross-checks",
     "active_listing_use": "allowed as structured pricing evidence only when direct, current, exact or near, quantity and shipping normalized, deduplicated, and separated from sold evidence",
     "auction_result_use": "identification or collector-context only; excluded from pricing calculations",
     "target_price_count": 4,
-    "minimum_price_count": 3,
+    "minimum_price_count_for_price": 1,
+    "minimum_price_count_for_medium_confidence": 3,
+    "two_price_medium_rule": "two exact prices with highest-to-lowest ratio at most 1.35",
     "high_confidence_max_cv": 0.25,
     "high_confidence_max_high_low_ratio": 1.75,
     "disposition_boundary_buffer": 5.0,
     "etsy_adjustment": -0.05,
     "ebay_adjustment": 0.05,
-    "active_listing_formula": "cleaned average A; H80=0.80*highest cleaned price; anchor B=(A+H80)/2; clamp B to cleaned range; Etsy=B*0.95; eBay=B*1.05",
+    "active_listing_formula": "weighted median: eBay sold 1.00, eBay active 0.70, Etsy sold 0.80, Etsy active 0.60, near match multiplier 0.85; clamp Etsy -5% and eBay +5% to included range",
 }
 CONFIRMATION_TEXT = "I confirm the selected inputs, exclusions, and catalog rules."
 WORKFLOWS = {"full-intake", "legacy-catalog-refresh"}

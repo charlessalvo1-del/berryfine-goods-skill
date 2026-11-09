@@ -18,7 +18,8 @@ Turn photographed goods into an evidence-backed, client-specific inventory. Keep
 - Run `scripts/preflight_lock.py --help` before every new intake or retest.
 - Run `scripts/sequence_review_gate.py --help` before grouping a flat, unnumbered camera roll.
 - Run `scripts/research_gate.py --help` only when validating a retained legacy v2.6 research audit.
-- Run `scripts/adaptive_market_gate.py --help` for v2.7 pilot research.
+- Run `scripts/price_first_gate.py --help` for v2.8 price-first research. Use `adaptive_market_gate.py` only for sealed v2.7 records.
+- Use `scripts/pricing_policy.py` as the shared price/disposition calculation and `scripts/pricing_replay.py` only for hash-bound, non-destructive policy comparisons against sealed evidence.
 - Run `scripts/delivery_gate.py --help` before reporting a batch complete.
 - Run `scripts/catalog_gate.py --help` after spreadsheet authoring and before the delivery gate.
 - Run `scripts/bfg.py doctor` after installation and `scripts/bfg.py audit` before reporting any intake complete.
@@ -51,7 +52,7 @@ Report:
 - every sibling archive, prior-test, categorized-output, manifest, catalog, and exception artifact that will be excluded
 - the count of exact duplicate hash groups, the canonical file retained for each group, and every redundant path that will be automatically excluded without deleting source files
 - the proposed client name, intake ID, intake method, deliverable names, dated categorized-folder name, and centralized iteration records folder
-- the complete catalog rules for this run: preserve every pre-populated row and its existing `LOCATION`; write `Storage` only for newly appended rows; keep detailed responses in H; preserve I; add `RECOMMENDED ACTION` in J; apply the current-row fill rules; and use `SELL` at $50 or more, `CONFIRM DONATION` from $40 through $49.99, `DONATE` below $40, and `REVIEW` only for independent uncertainty
+- the complete catalog rules for this run: preserve every pre-populated row and its existing `LOCATION`; write `Storage` only for newly appended rows; keep detailed responses in H; preserve I; add `RECOMMENDED ACTION` in J; apply the current-row fill rules; and use the v2.8 price-first policy with a $55 automatic SELL buffer, conservative DONATE evidence, $40-$49.99 or operational-$45 CONFIRM DONATION, and priced REVIEW rows when confidence is insufficient
 
 For a fresh test, create a new intake ID and manifest. Never resume, copy, seed, or treat a prior test manifest, categorized folder, catalog, exception workbook, item assignment, identification, or valuation as the current result. Prior-run information may be consulted only after the independent review is complete, unless the user explicitly authorizes a baseline-assisted run. Pass every prior-run directory to `photo_manifest.py` with a separate exact `--ignore-dir` argument.
 
@@ -195,27 +196,21 @@ Use the standing BFG condition assumption for valuation: unless positive photogr
 
 Follow [references/research-and-valuation.md](references/research-and-valuation.md). Keep identification confidence separate from pricing confidence: a confirmed object may still have low-confidence pricing, and a strong price cluster does not prove the proposed identity.
 
-Use an adaptive `6 / 8 / 10` search ladder for every item. The first six attempts must include general web discovery, image search, Etsy-first marketplace discovery, an eBay cross-check, and at least three materially different strategies. Stop at six only when four exact or near direct marketplace prices form a stable cluster and the supported range has at least a $5 buffer from the $40 and $50 disposition boundaries. Otherwise continue to eight.
+Use an adaptive `6 / 8 / 10` search ladder for every item. The first six attempts must include general web discovery, image search, Etsy-first marketplace discovery, an eBay cross-check, and at least three materially different strategies. Stop at six only when four prices meet HIGH-confidence requirements. Otherwise continue to eight.
 
-At eight attempts, three consistent exact or near direct prices may authorize a medium-confidence decision when coefficient of variation is at most 0.25, highest-to-lowest ratio is at most 1.75, and the range has at least a $5 boundary buffer. Otherwise stop with `REVIEW` and the exact operational label `$40-$50 STAFF DECISION` when a low-value item remains uncertain, its high bound is below $125, and further search is unlikely to change the staff decision. Do not run attempts nine or ten merely to distinguish donation from a marginal sale. Continue to ten only for a plausible high-value, rare, collector-significant, regulated, or materially misidentified item. Record the stop tier and an item-specific reason.
+At eight attempts, three direct prices support MEDIUM confidence; two exact prices within 35% may also support MEDIUM. One price or a dispersed set produces a LOW-confidence provisional price. A zero-comp confirmed/probable common low-value item may receive the exact operational label `$40-$50 STAFF DECISION` and a $45 operational handling price, explicitly not a market-value claim. Continue to ten only for a plausible high-value, rare, collector-significant, regulated, or materially misidentified item.
 
 Etsy is the preferred pricing surface; use eBay active and sold/Product Research pages as cross-checks. Included pricing evidence may be current active or completed/sold listings only when the direct page is opened, the item is exact or near, the price is normalized to a one-item USD total, and the URL and evidence capture are unique. Require at least three included prices for any non-`REVIEW` disposition and target four. Do not call an active price a realized sale.
 
 Auction data is identification-only. It can establish maker, model, age, terminology, or collector significance, but it must never enter the price calculation. Category pages, search pages, storefronts, snippets, price guides, sponsored results, and broad analogues cannot be included as pricing comps.
 
-For included prices, calculate the active-market anchor exactly:
+For included prices, calculate a weighted-median anchor. Weight eBay sold/completed `1.00`, eBay active `0.70`, Etsy sold/completed `0.80`, and Etsy active `0.60`; multiply near matches by `0.85`. Clamp Etsy at 5% below and eBay at 5% above the anchor to the defensible included-price interval.
 
-- `A` = arithmetic mean of cleaned normalized prices
-- `H80` = 80% of the highest cleaned price
-- `B` = `(A + H80) / 2`, clamped to the cleaned price range
-- recommended Etsy price = `B * 0.95`
-- recommended eBay price = `B * 1.05`
-
-The range, not the midpoint, controls disposition. A four-price cluster is stable only when its coefficient of variation is at most 0.25 and its highest-to-lowest ratio is at most 1.75. Record every attempt, direct opened URL, inclusion or rejection reason, evidence digest, identification assessment, pricing confidence, synthesis inputs, and stop rationale. Query text alone is not evidence, and `REVIEW` is not permission to skip the ladder.
+Keep price issuance separate from disposition. HIGH requires four stable prices including two eBay sold records. MEDIUM requires three direct prices or two exact prices within 35%. LOW still issues a provisional price but cannot automatically authorize sale or donation outside the staff band. SELL requires a market price of at least $55 plus confirmed/probable identity and safety clearance; DONATE requires a medium/high-confidence upper value below $40. Record every input and decision reproducibly.
 
 Use Google web/image discovery when available. The approved integrated web/image search may substitute for Google discovery when browser access cannot scale, but label the surface honestly. Do not claim a Google search that was not performed. Never scrape a restricted eBay interface; capture visible evidence from an authorized session.
 
-Store the v2.7 pilot audit in the structured format defined by [references/research-audit-schema.md](references/research-audit-schema.md), then run `scripts/adaptive_market_gate.py`. The gate must reconcile the exact research population to the ledger and fail closed on missing attempts, weak direct evidence, auction pricing, non-reproducible formulas, or unsupported confidence. Do not allow low-confidence pricing to authorize a non-`REVIEW` disposition.
+Store the v2.8 pilot audit in the structured format defined by [references/research-audit-schema.md](references/research-audit-schema.md), then run `scripts/price_first_gate.py`. The gate must reconcile the exact research population to the ledger and fail closed on missing attempts, weak direct evidence, auction pricing, non-reproducible formulas, or unsupported confidence. Low-confidence pricing may issue a provisional price but cannot authorize automatic sale or donation outside the staff band.
 
 ## Value and decide
 
@@ -231,12 +226,13 @@ Produce:
 - `quick_sale_price`: price intended to move quickly
 - `decision`: `SELL`, `DONATE`, `REVIEW`, or `CONFIRM DONATION`
 
-Use the Berryfine default rule against the entire supported range, not only its midpoint or `decision_basis_value`:
+Use the v2.8 price-first rule:
 
-- `SELL` only when `market_value_low` is at least $50
-- `CONFIRM DONATION` only when the entire range is from $40 through $49.99
-- `DONATE` only when `market_value_high` is below $40
-- use `REVIEW` when the supported range crosses either disposition boundary, or for unusual collector value, a rare variant, a potentially valuable unidentified item, regulated goods, or evidence too weak for a responsible decision
+- `SELL` only for `market` pricing with medium/high confidence, confirmed/probable identity, safety clearance, and a recommended price of at least $55
+- `DONATE` only for `market` pricing whose credible high value is below $40
+- `CONFIRM DONATION` for an eligible recommended price from $40 through $49.99 or a clearly labeled operational $45 staff price
+- use `REVIEW` for a provisional price outside the staff band, a $50-$54.99 recommendation, unusual collector value, tentative identity, safety/policy uncertainty, or an unpriced item
+- never erase a defensible provisional price merely because the disposition remains `REVIEW`
 
 For every newly created or reappraised supported $40-through-$49.99 item, use `CONFIRM DONATION`, set `donation_confirmation_status` to `PENDING`, and include this instruction in `decision_rationale`, column H, and its Exceptions row: `Confirm this item will not be sold before donation or rehoming.` Keep it `DRAFT` and `PENDING` until BFG resolves it. To transition to `DONATE`, record `donation_confirmation_status=CONFIRMED`, `donation_confirmed_by`, an ISO `donation_confirmed_at`, and set `listing_status=DO_NOT_LIST`. If BFG declines donation, record `donation_confirmation_status=DECLINED`, the confirmer and timestamp, but do not rewrite the research recommendation as `SELL` unless a supported reappraisal places the entire range in the SELL band. Do not retroactively change a retained historical decision unless the item is explicitly reappraised.
 
