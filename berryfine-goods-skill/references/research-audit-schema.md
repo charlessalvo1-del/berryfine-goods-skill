@@ -1,8 +1,8 @@
 # Structured research audit
 
-## v2.9.1 adaptive-age marketplace pilot
+## v2.10.0 independently validated marketplace pilot
 
-New and re-run intakes use `research_policy_version=2.9.1-pilot` and `scripts/price_first_gate.py`. Record `price_synthesis.method=weighted_marketplace_median`, `price_type`, the supported low/mid/high interval, decision basis, conservative decision floor, Etsy and eBay recommendations, pricing confidence, decision confidence, and the deterministic `decision_rule`. The controlled $50 decision rules never apply to zero-comp operational prices.
+New and re-run intakes use `research_policy_version=2.10.0-pilot` and `scripts/price_first_gate.py`. Record `price_synthesis.method=weighted_marketplace_median`, `price_type`, the supported low/mid/high interval, decision basis, conservative decision floor, Etsy and eBay recommendations, pricing confidence, decision confidence, `decision_validation`, bootstrap decision and interval, stress decision, and the deterministic `decision_rule`. Controlled sale rules never apply to zero-comp operational prices. SELL may be HIGH confidence only with dual-method consensus; one-method SELL support is a controlled MEDIUM-confidence test listing. DONATE requires dual-method consensus.
 
 The research population must exactly match the ledger. An included active comp requires `availability_status=available`; a sold/completed comp requires `sale_date`. Every included comp requires `seller_key`, nonempty `matched_attributes`, `mismatched_attributes`, and a direct evidence capture. Exact comps cannot contain material mismatches. Sold evidence is time-weighted through 36 months; older rare evidence requires current active corroboration. Auctions are identification-only. Price issuance does not authorize listing or publication, and every AI-created row remains DRAFT/PENDING.
 
@@ -36,13 +36,19 @@ Sold/completed evidence replaces the null with a verified ISO `sale_date`. The s
   "etsy_price": 160.0,
   "ebay_price": 175.0,
   "pricing_confidence": "low",
-  "decision_confidence": "high"
+  "decision_confidence": "high",
+  "decision_validation": "dual_method_consensus",
+  "bootstrap_decision": "SELL",
+  "bootstrap_interval_low": 99.0,
+  "bootstrap_interval_mid": 169.0,
+  "bootstrap_interval_high": 475.0,
+  "stress_decision": "SELL"
 }
 ```
 
 ## v2.8 price-first marketplace pilot (legacy replay)
 
-Sealed v2.8 records retain their original policy label and may be inspected or non-destructively replayed, but they do not satisfy the v2.9 current-research gate.
+Sealed v2.8 and v2.9 records retain their original policy labels and may be inspected or non-destructively replayed, but they do not satisfy the v2.10 current-research gate.
 
 ## v2.7 adaptive marketplace pilot (legacy validation)
 

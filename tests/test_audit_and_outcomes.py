@@ -39,8 +39,9 @@ class AuditAndOutcomeTests(unittest.TestCase):
             with inventory.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=list(row)); writer.writeheader(); writer.writerow(row)
             events = [
-                {"event_id": "e1", "client_id": "c", "item_id": "item-1", "event_type": "IDENTIFICATION_CONFIRMED", "occurred_at": "2026-08-01T12:00:00-04:00", "recorded_by": "owner", "confirmed_identity": "Verified item", "verification_method": "maker label"},
-                {"event_id": "e2", "client_id": "c", "item_id": "item-1", "event_type": "SOLD", "occurred_at": "2026-08-02T12:00:00-04:00", "recorded_by": "operator", "channel": "eBay", "sold_price": 80, "currency": "USD"},
+                {"event_id": "e1", "client_id": "c", "item_id": "item-1", "event_type": "LISTED", "occurred_at": "2026-07-31T12:00:00-04:00", "recorded_by": "operator", "channel": "eBay", "listed_price": 100, "currency": "USD"},
+                {"event_id": "e2", "client_id": "c", "item_id": "item-1", "event_type": "IDENTIFICATION_CONFIRMED", "occurred_at": "2026-08-01T12:00:00-04:00", "recorded_by": "owner", "confirmed_identity": "Verified item", "verification_method": "maker label"},
+                {"event_id": "e3", "client_id": "c", "item_id": "item-1", "event_type": "SOLD", "occurred_at": "2026-08-02T12:00:00-04:00", "recorded_by": "operator", "channel": "eBay", "sold_price": 80, "currency": "USD", "net_proceeds": 65},
             ]
             for value in events:
                 event.write_text(json.dumps(value), encoding="utf-8")
@@ -51,6 +52,9 @@ class AuditAndOutcomeTests(unittest.TestCase):
             value = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(value["identification_accuracy_pct"], 100.0)
             self.assertEqual(value["price_range_coverage_pct"], 100.0)
+            self.assertEqual(value["median_days_to_sale"], 2.0)
+            self.assertEqual(value["median_sale_to_list_ratio"], 0.8)
+            self.assertEqual(value["median_net_proceeds"], 65.0)
             self.assertFalse(value["accuracy_claim_authorized"])
 
 

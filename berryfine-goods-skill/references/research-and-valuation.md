@@ -4,12 +4,12 @@
 
 Prefer:
 
-1. Direct exact or near Etsy active listings
-2. Direct exact or near eBay sold/Product Research records
+1. Direct exact or near eBay sold/Product Research records
+2. Direct exact or near Etsy active listings
 3. Direct exact or near eBay active listings
 4. General web, image, specialist, and auction references for identification only
 
-Etsy is the preferred pricing surface and eBay is the cross-check. Active and sold prices may be combined when every included page is direct, current, exact or near, normalized to a one-item USD total, and deduplicated. Label active listings as asking prices and sold listings as realized transactions. Auction prices are never valuation inputs; use auction evidence only to identify the object or detect collector significance.
+eBay Product Research is the preferred realized-price surface. Etsy active and eBay active listings are current-market cross-checks. Active and sold prices may be combined when every included page or captured Product Research row is direct, current, exact or near, normalized to a one-item USD total, and deduplicated. Label active listings as asking prices and sold listings as realized transactions. Auction prices are never valuation inputs; use auction evidence only to identify the object or detect collector significance.
 
 Record the evidence class in `valuation_basis`. Under v2.9, pricing confidence and decision confidence are separate: a wide range may produce an imprecise provisional price while its conservative floor still supports SELL.
 
@@ -31,7 +31,7 @@ Use this adaptive query ladder. Every item records exactly 6, 8, or 10 distinct 
 2. distinctive visual fingerprint without an assumed maker
 3. image search using the clearest full-object image and, when useful, a crop of the mark or distinctive hardware
 4. candidate maker/model plus a feature that can falsify the match
-5. candidate identity on Etsy, then eBay active and sold/Product Research surfaces
+5. candidate identity in eBay sold/Product Research, then Etsy and eBay active surfaces
 6. synonyms, regional terms, translated markings, and alternate spellings when the first language or category vocabulary fails
 
 Google or the approved integrated web/image search is appropriate for identification leads. Record the actual query, reproducible search URL, search surface, URLs actually opened, outcome, and time. Label the surface honestly. Query text without opened evidence does not prove that a candidate page was verified.
@@ -103,7 +103,9 @@ Use the weighted median as the anchor. Clamp Etsy at `anchor * 0.95` and eBay at
 
 Calculate a conservative decision floor independently from the recommended list price. One active exact comp uses 70% of price; one near comp uses 60%. Two active comps use 85% of the lower price when both are exact and 80% otherwise. Three or more active comps use 90% of the lower quartile. Sold evidence uses 80%/70% for one comp, 90% of the lower for two, and 95% of the lower quartile for three or more. Automatic SELL normally requires the floor to reach $55, medium/high decision confidence, confirmed/probable identity, and safety clearance—even when numeric pricing confidence remains LOW. The controlled $50 exception applies only to confirmed/probable, safety-clear items and passes when at least two direct prices produce a floor of at least $49.50; when at least two stable direct prices have a low value of at least $50, CV at most 0.25, and ratio at most 1.75; or when exactly two active direct prices bracket $50, have a half-up rounded midpoint at least $47.50, and ratio at most 1.35. The last route uses a $50 controlled test listing. Zero-comp operational prices never qualify. Automatic DONATE still requires a stable market interval wholly below $40. CONFIRM DONATION covers an eligible $40-$49.99 recommendation or the operational $45 handling price.
 
-The v2.7 cleaned-average formula is retained only for validating sealed v2.7 records. New work uses `scripts/price_first_gate.py` and `research_policy_version=2.9.1-pilot`.
+After the normal price synthesis, v2.10 independently challenges proposed SELL and DONATE decisions. A reproducible 2,000-sample weighted-median bootstrap estimates a 90% evidence interval. A separate stress test changes all prices adversely by 10% and removes each usable comparable in turn. Both methods agreeing produces HIGH decision confidence; one-method SELL agreement produces a controlled MEDIUM-confidence test listing; unsupported SELL and DONATE decisions fail closed to REVIEW. These diagnostics do not upgrade numeric pricing confidence or substitute for realized-sale evidence.
+
+The v2.7 cleaned-average formula is retained only for validating sealed v2.7 records. New work uses `scripts/price_first_gate.py` and `research_policy_version=2.10.0-pilot`.
 
 Adjust for positively evidenced condition differences, completeness, testing, authenticity confidence, seasonality, shipping difficulty, and lot size. Do not discount for hypothetical damage or missing condition detail. State material adjustments.
 

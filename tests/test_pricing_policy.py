@@ -43,10 +43,12 @@ class PricingPolicyTests(unittest.TestCase):
         self.assertEqual(result["decision"], "SELL")
         self.assertGreaterEqual(result["ebay_price"], 55)
 
-    def test_two_close_exact_prices_can_authorize_donation(self):
+    def test_two_close_exact_prices_cannot_authorize_donation_without_consensus(self):
         result = synthesize(item([comp(1, 20), comp(2, 22)]))
         self.assertEqual(result["pricing_confidence"], "medium")
-        self.assertEqual(result["decision"], "DONATE")
+        self.assertEqual(result["base_decision"], "DONATE")
+        self.assertEqual(result["decision"], "REVIEW")
+        self.assertEqual(result["decision_validation"], "validation_disagreement")
 
     def test_one_price_is_provisional_but_retained(self):
         result = synthesize(item([comp(1, 75)]))
@@ -78,11 +80,16 @@ class PricingPolicyTests(unittest.TestCase):
         self.assertEqual(result["pricing_confidence"], "high")
 
     def test_active_only_floor_can_authorize_sell_without_precise_price(self):
-        result = synthesize(item([comp(1, 99), comp(2, 169), comp(3, 475)]))
+        source = item([comp(1, 99), comp(2, 169), comp(3, 475)])
+        result = synthesize(source)
+        repeated = synthesize(source)
         self.assertEqual(result["pricing_confidence"], "low")
         self.assertEqual(result["decision"], "SELL")
         self.assertEqual(result["decision_confidence"], "high")
+        self.assertEqual(result["decision_validation"], "dual_method_consensus")
         self.assertGreaterEqual(result["decision_floor"], 55)
+        self.assertEqual(result["bootstrap_interval_low"], repeated["bootstrap_interval_low"])
+        self.assertEqual(result["bootstrap_interval_high"], repeated["bootstrap_interval_high"])
 
     def test_unavailable_active_listing_is_excluded(self):
         unavailable = comp(1, 15, marketplace="etsy", match="near")
@@ -90,7 +97,9 @@ class PricingPolicyTests(unittest.TestCase):
         result = synthesize(item([unavailable, comp(2, 100), comp(3, 130, marketplace="etsy")]))
         self.assertEqual(result["comp_count"], 2)
         self.assertEqual(result["excluded_pricing_comps"], 1)
+        self.assertEqual(result["base_decision"], "SELL")
         self.assertEqual(result["decision"], "SELL")
+        self.assertEqual(result["decision_validation"], "single_method_controlled")
 
     def test_old_rare_sale_needs_current_active_corroboration(self):
         old_sale = comp(1, 100, status="sold")
@@ -99,7 +108,8 @@ class PricingPolicyTests(unittest.TestCase):
         rare["rarity_assessment"] = {"classification": "rare"}
         result = synthesize(rare)
         self.assertEqual(result["comp_count"], 2)
-        self.assertEqual(result["decision"], "SELL")
+        self.assertEqual(result["base_decision"], "SELL")
+        self.assertEqual(result["decision"], "REVIEW")
 
     def test_floor_at_49_50_rounds_to_controlled_sell(self):
         result = synthesize(item([
@@ -109,7 +119,9 @@ class PricingPolicyTests(unittest.TestCase):
         ]))
         self.assertEqual(result["decision_floor"], 49.5)
         self.assertEqual(result["decision"], "SELL")
-        self.assertEqual(result["decision_rule"], "rounded_floor_50")
+        self.assertEqual(result["base_decision_rule"], "rounded_floor_50")
+        self.assertEqual(result["decision_rule"], "single_method_controlled_sell")
+        self.assertEqual(result["decision_validation"], "single_method_controlled")
         self.assertGreaterEqual(result["ebay_price"], 50)
 
     def test_stable_two_comp_observed_floor_can_sell_at_50(self):
@@ -117,17 +129,19 @@ class PricingPolicyTests(unittest.TestCase):
             comp(1, 50, marketplace="etsy", match="near"),
             comp(2, 69, marketplace="etsy", match="near"),
         ]))
-        self.assertEqual(result["decision"], "SELL")
-        self.assertEqual(result["decision_rule"], "stable_two_comp_floor_50")
+        self.assertEqual(result["base_decision"], "SELL")
+        self.assertEqual(result["decision"], "REVIEW")
+        self.assertEqual(result["base_decision_rule"], "stable_two_comp_floor_50")
 
     def test_tight_active_pair_bracketing_50_uses_test_listing(self):
         result = synthesize(item([
             comp(1, 42, marketplace="etsy", match="near"),
             comp(2, 52.99, marketplace="etsy", match="near"),
         ]))
-        self.assertEqual(result["decision"], "SELL")
+        self.assertEqual(result["base_decision"], "SELL")
+        self.assertEqual(result["decision"], "REVIEW")
         self.assertEqual(result["ebay_price"], 50)
-        self.assertEqual(result["decision_rule"], "controlled_active_bracket_50")
+        self.assertEqual(result["base_decision_rule"], "controlled_active_bracket_50")
 
     def test_wide_active_pair_does_not_use_bracket_exception(self):
         result = synthesize(item([

@@ -82,6 +82,14 @@ def validate_item(item, ledger):
         raise GateError(f"{item_id} synthesis decision_confidence is not reproducible")
     if synthesis.get("pricing_confidence") != expected["pricing_confidence"]:
         raise GateError(f"{item_id} synthesis pricing_confidence is not reproducible")
+    if synthesis.get("decision_validation") != expected["decision_validation"]:
+        raise GateError(f"{item_id} synthesis decision_validation is not reproducible")
+    if synthesis.get("bootstrap_decision") != expected["bootstrap_decision"]:
+        raise GateError(f"{item_id} synthesis bootstrap_decision is not reproducible")
+    if synthesis.get("stress_decision") != expected["stress_decision"]:
+        raise GateError(f"{item_id} synthesis stress_decision is not reproducible")
+    for field in ("bootstrap_interval_low", "bootstrap_interval_mid", "bootstrap_interval_high"):
+        same_number(synthesis.get(field), expected[field], f"{item_id} synthesis {field}")
 
     for field in ("market_value_low", "market_value_mid", "market_value_high", "decision_basis_value", "ebay_price"):
         same_number(ledger.get(field), expected[field], f"{item_id} ledger {field}")
@@ -93,6 +101,8 @@ def validate_item(item, ledger):
         raise GateError(f"{item_id} ledger valuation_confidence does not match")
     if ledger.get("decision_confidence") != expected["decision_confidence"]:
         raise GateError(f"{item_id} ledger decision_confidence does not match")
+    if ledger.get("decision_validation") != expected["decision_validation"]:
+        raise GateError(f"{item_id} ledger decision_validation does not match")
     if ledger.get("decision") != expected["decision"]:
         raise GateError(f"{item_id} ledger decision does not match v2.9 policy")
     if int(float(ledger.get("comp_count") or 0)) != expected["comp_count"]:
@@ -106,6 +116,7 @@ def validate_item(item, ledger):
         "price_type": expected["price_type"],
         "pricing_confidence": expected["pricing_confidence"],
         "decision_confidence": expected["decision_confidence"],
+        "decision_validation": expected["decision_validation"],
         "decision": expected["decision"],
     }
 

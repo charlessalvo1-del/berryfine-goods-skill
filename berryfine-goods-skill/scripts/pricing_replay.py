@@ -67,7 +67,9 @@ def replay(args):
         research_item = research_by_id[row["item_id"]]
         result = synthesize(research_item, safety_status=row["safety_status"])
         included_source = [comp for comp in research_item.get("pricing_comparables", []) if comp.get("included") is True]
-        evidence_ready = all(current_evidence_ready(comp) for comp in included_source) if included_source else True
+        evidence_ready = bool(included_source) and all(
+            current_evidence_ready(comp) for comp in included_source
+        )
         row.update(
             price_type=result["price_type"],
             comp_count=text(result["comp_count"]),
@@ -78,6 +80,7 @@ def replay(args):
             valuation_basis=result["valuation_basis"],
             valuation_confidence=result["pricing_confidence"],
             decision_confidence=result["decision_confidence"],
+            decision_validation=result["decision_validation"],
             ebay_price=text(result["ebay_price"]),
             decision=result["decision"],
             decision_rationale=result["rationale"],
@@ -103,6 +106,10 @@ def replay(args):
                 "price_type": row["price_type"],
                 "pricing_confidence": row["valuation_confidence"],
                 "decision_confidence": row["decision_confidence"],
+                "decision_validation": row["decision_validation"],
+                "base_decision": result["base_decision"],
+                "bootstrap_decision": result["bootstrap_decision"],
+                "stress_decision": result["stress_decision"],
                 "included_prices": result["comp_count"],
                 "recommended_ebay_price": result["ebay_price"],
                 "decision_floor": result["decision_floor"],
@@ -117,6 +124,7 @@ def replay(args):
     price_types = Counter(row["price_type"] for row in revised)
     confidence = Counter(row["valuation_confidence"] for row in revised)
     decision_confidence = Counter(row["decision_confidence"] for row in revised)
+    decision_validation = Counter(row["decision_validation"] for row in revised)
     sample_ids = set()
     for bucket in (0, 1, 2, 3, 4):
         candidates = [
@@ -142,8 +150,10 @@ def replay(args):
         "price_types": dict(price_types),
         "pricing_confidence": dict(confidence),
         "decision_confidence": dict(decision_confidence),
-        "current_gate_evidence_ready_items": sum(item["current_gate_evidence_ready"] for item in item_results),
+        "decision_validation": dict(decision_validation),
+        "current_gate_structured_comp_ready_items": sum(item["current_gate_evidence_ready"] for item in item_results),
         "items_needing_evidence_field_review": sum(not item["current_gate_evidence_ready"] for item in item_results),
+        "zero_comp_items": sum(item["included_prices"] == 0 for item in item_results),
         "search_budget": summarize_search_budget(research_by_id, item_results),
         "stratified_sample_item_ids": sorted(sample_ids),
         "stratified_sample_count": len(sample_ids),

@@ -348,6 +348,7 @@ class InventoryLedgerTests(unittest.TestCase):
                 valuation_basis="active_market_decision_floor",
                 valuation_confidence="low",
                 decision_confidence="high",
+                decision_validation="dual_method_consensus",
                 listing_status="DRAFT",
                 human_review_status="PENDING",
                 approved_by="",

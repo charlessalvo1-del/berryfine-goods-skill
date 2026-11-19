@@ -1,6 +1,6 @@
 # Berryfine Goods Skill
 
-Version 2.9.1 adds a controlled $50 sale-boundary exception to adaptive-age pricing and independent decision confidence. The normal $55 conservative-floor rule remains primary. Confirmed/probable, safety-clear items may also qualify at $50 when at least two direct prices produce a conservative floor of at least $49.50, when two or more stable direct prices have an observed floor of at least $50, or when exactly two tightly grouped active prices bracket $50 and support a controlled test listing. Zero-comp operational $45 items remain CONFIRM DONATION.
+Version 2.10.0 adds independent disposition validation. Pricing remains a weighted marketplace median, but automatic SELL and DONATE recommendations are now challenged by a reproducible robust-median bootstrap and an adverse stress test that applies a 10% price shock and removes every usable comparable in turn. Agreement produces HIGH decision confidence; one-method SELL support produces a controlled MEDIUM-confidence test listing; unsupported SELL and DONATE candidates fail closed to REVIEW. High pricing confidence remains reserved for stable evidence containing verified sold records. Zero-comp operational $45 items remain CONFIRM DONATION.
 
 The standard-saleable condition assumption remains in force: absent positive contrary evidence, value items as complete, functional, saleable, and in typical good used condition. Missing condition detail alone does not cause REVIEW.
 

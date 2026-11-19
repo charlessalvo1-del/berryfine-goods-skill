@@ -3,13 +3,16 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import math
+import random
 import statistics
 from datetime import date, datetime
 from typing import Any
 
 
-POLICY_VERSION = "2.9.1-pilot"
+POLICY_VERSION = "2.10.0-pilot"
 AUTO_IDENTITIES = {"confirmed", "probable"}
 UNAVAILABLE_MARKERS = ("unavailable", "sold out", "out of stock", "not available")
 
@@ -142,7 +145,7 @@ def _decision_floor(comps: list[dict[str, Any]], prices: list[float]) -> float:
     return prices[0] * (0.70 if exact else 0.60)
 
 
-def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[str, Any]:
+def _synthesize_base(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[str, Any]:
     as_of = _as_of(item)
     rarity = str(item.get("rarity_assessment", {}).get("classification", "")).casefold()
     rare = rarity in {"scarce", "rare", "unique"}
@@ -198,7 +201,7 @@ def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[st
     )
     exact = sum(str(comp.get("comparability", "")).casefold() == "exact" for comp in included)
     marketplaces = {str(comp.get("marketplace", "")).casefold() for comp in included}
-    classic_high = len(included) >= 4 and ebay_sold >= 2 and cv <= 0.25 and ratio <= 1.75
+    classic_high = len(included) >= 3 and ebay_sold >= 2 and cv <= 0.25 and ratio <= 1.75
     cross_market_high = (
         len(included) >= 3 and recent_sold >= 1 and exact >= 1
         and {"ebay", "etsy"}.issubset(marketplaces) and cv <= 0.25 and ratio <= 1.35
@@ -287,3 +290,160 @@ def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[st
         "excluded_pricing_comps": len(source) - len(included),
         "decision_rule": decision_rule,
     }
+
+
+def _weighted_comps(item: dict[str, Any]) -> list[tuple[int, dict[str, Any], float]]:
+    """Return current usable evidence with its deterministic marketplace weight."""
+    as_of = _as_of(item)
+    rarity = str(item.get("rarity_assessment", {}).get("classification", "")).casefold()
+    rare = rarity in {"scarce", "rare", "unique"}
+    source = item.get("pricing_comparables", [])
+    has_current_active = any(
+        comp.get("included") is True and _current_active(comp, as_of) for comp in source
+    )
+    result: list[tuple[int, dict[str, Any], float]] = []
+    for index, comp in enumerate(source):
+        if comp.get("included") is not True:
+            continue
+        match = str(comp.get("comparability", "")).casefold()
+        match_weight = 1.0 if match == "exact" else (0.85 if match == "near" else 0.0)
+        weight = (
+            _base_weight(comp)
+            * match_weight
+            * _freshness(comp, as_of=as_of, rare=rare, current_active=has_current_active)
+        )
+        if weight > 0:
+            result.append((index, comp, weight))
+    return result
+
+
+def _weighted_choice(rng: random.Random, comps: list[tuple[int, dict[str, Any], float]]) -> dict[str, Any]:
+    total = sum(weight for _, _, weight in comps)
+    point = rng.random() * total
+    running = 0.0
+    for _, comp, weight in comps:
+        running += weight
+        if running >= point:
+            return comp
+    return comps[-1][1]
+
+
+def _bootstrap_validation(item: dict[str, Any], *, safety_status: str) -> dict[str, Any]:
+    """Produce a reproducible robust-median decision diagnostic."""
+    identity = str(item.get("identification_assessment", {}).get("confidence", "")).casefold()
+    comps = _weighted_comps(item)
+    if identity not in AUTO_IDENTITIES or safety_status != "CLEAR" or len(comps) < 3:
+        return {"decision": "REVIEW", "low": None, "mid": None, "high": None}
+    seed_material = "|".join(
+        f"{comp.get('comp_id', index)}:{comp.get('normalized_unit_total_usd')}:{weight:.8f}"
+        for index, comp, weight in comps
+    )
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16)
+    rng = random.Random(seed)
+    medians = []
+    for _ in range(2000):
+        draw = [_weighted_choice(rng, comps) for _ in range(len(comps))]
+        medians.append(
+            statistics.median(float(comp["normalized_unit_total_usd"]) for comp in draw)
+        )
+    low = _percentile(medians, 0.05)
+    mid = statistics.median(medians)
+    high = _percentile(medians, 0.95)
+    if low >= 55:
+        decision = "SELL"
+    elif high < 40:
+        decision = "DONATE"
+    elif 40 <= mid < 50 and high - low <= 20:
+        decision = "CONFIRM DONATION"
+    else:
+        decision = "REVIEW"
+    return {"decision": decision, "low": low, "mid": mid, "high": high}
+
+
+def _scaled_item(item: dict[str, Any], factor: float) -> dict[str, Any]:
+    changed = copy.deepcopy(item)
+    for comp in changed.get("pricing_comparables", []):
+        if comp.get("included") is True:
+            comp["normalized_unit_total_usd"] = round(
+                float(comp["normalized_unit_total_usd"]) * factor,
+                2,
+            )
+    return changed
+
+
+def _stress_validation(item: dict[str, Any], *, safety_status: str, target: str) -> str:
+    """Require an adverse 10% shock and every usable leave-one-out case to agree."""
+    usable = _weighted_comps(item)
+    if target not in {"SELL", "DONATE"} or len(usable) < 2:
+        return "REVIEW"
+    factor = 0.90 if target == "SELL" else 1.10
+    if _synthesize_base(_scaled_item(item, factor), safety_status=safety_status)["decision"] != target:
+        return "REVIEW"
+    for index, _, _ in usable:
+        changed = copy.deepcopy(item)
+        changed["pricing_comparables"][index]["included"] = False
+        if _synthesize_base(changed, safety_status=safety_status)["decision"] != target:
+            return "REVIEW"
+    return target
+
+
+def synthesize(item: dict[str, Any], *, safety_status: str = "CLEAR") -> dict[str, Any]:
+    """Synthesize price and apply independent robustness validation to disposition."""
+    base = _synthesize_base(item, safety_status=safety_status)
+    bootstrap = _bootstrap_validation(item, safety_status=safety_status)
+    stress = _stress_validation(
+        item,
+        safety_status=safety_status,
+        target=base["decision"],
+    )
+    result = {
+        **base,
+        "base_decision": base["decision"],
+        "base_decision_rule": base["decision_rule"],
+        "bootstrap_decision": bootstrap["decision"],
+        "bootstrap_interval_low": bootstrap["low"],
+        "bootstrap_interval_mid": bootstrap["mid"],
+        "bootstrap_interval_high": bootstrap["high"],
+        "stress_decision": stress,
+        "decision_validation": "not_applicable",
+    }
+    if base["decision"] in {"SELL", "DONATE"}:
+        bootstrap_agrees = bootstrap["decision"] == base["decision"]
+        stress_agrees = stress == base["decision"]
+        if bootstrap_agrees and stress_agrees:
+            result["decision_confidence"] = "high"
+            result["decision_validation"] = "dual_method_consensus"
+            result["decision_rule"] = f"dual_method_{base['decision'].casefold()}"
+            result["rationale"] = (
+                f"{base['rationale']} Independent robust-median and adverse-stress checks agree."
+            )
+        elif bootstrap_agrees or stress_agrees:
+            if base["decision"] == "SELL":
+                result["decision_confidence"] = "medium"
+                result["decision_validation"] = "single_method_controlled"
+                result["decision_rule"] = "single_method_controlled_sell"
+                result["rationale"] = (
+                    f"{base['rationale']} One independent validation method agrees; "
+                    "use a controlled test listing with human approval."
+                )
+            else:
+                result["decision"] = "REVIEW"
+                result["decision_confidence"] = "low"
+                result["decision_validation"] = "validation_disagreement"
+                result["decision_rule"] = "donation_validation_review"
+                result["rationale"] = (
+                    f"{base['rationale']} Independent validation did not agree; donation requires review."
+                )
+        else:
+            result["decision"] = "REVIEW"
+            result["decision_confidence"] = "low"
+            result["decision_validation"] = "validation_disagreement"
+            result["decision_rule"] = "disposition_validation_review"
+            result["rationale"] = (
+                f"{base['rationale']} Neither independent validation method confirmed the disposition."
+            )
+    elif base["decision"] == "CONFIRM DONATION":
+        result["decision_validation"] = "staff_confirmation"
+    else:
+        result["decision_validation"] = "insufficient_or_crossing_evidence"
+    return result

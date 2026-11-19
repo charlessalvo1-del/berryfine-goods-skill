@@ -83,7 +83,11 @@ class PriceFirstGateTests(unittest.TestCase):
             "decision_floor": result["decision_floor"],
             "pricing_confidence": result["pricing_confidence"],
             "decision_confidence": result["decision_confidence"],
+            "decision_validation": result["decision_validation"],
+            "bootstrap_decision": result["bootstrap_decision"],
+            "stress_decision": result["stress_decision"],
             **{field: result[field] for field in ("market_value_low", "market_value_mid", "market_value_high", "decision_basis_value", "etsy_price", "ebay_price")},
+            **{field: result[field] for field in ("bootstrap_interval_low", "bootstrap_interval_mid", "bootstrap_interval_high")},
         }
         ledger = {
             "safety_status": "CLEAR",
@@ -91,6 +95,7 @@ class PriceFirstGateTests(unittest.TestCase):
             "valuation_basis": result["valuation_basis"],
             "valuation_confidence": result["pricing_confidence"],
             "decision_confidence": result["decision_confidence"],
+            "decision_validation": result["decision_validation"],
             "decision": result["decision"],
             "comp_count": str(result["comp_count"]),
             **{field: str(result[field]) for field in ("market_value_low", "market_value_mid", "market_value_high", "decision_basis_value", "ebay_price")},

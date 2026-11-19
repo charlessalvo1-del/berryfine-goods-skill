@@ -19,6 +19,11 @@ from bfg_integrity import atomic_write_json, sha256_json
 
 EVENT_TYPES = {"LISTED", "PRICE_CHANGED", "SOLD", "DONATED", "RETURNED", "TEST_PASSED", "TEST_FAILED", "IDENTIFICATION_CONFIRMED", "IDENTIFICATION_CORRECTED"}
 MINIMUM_ACCURACY_SAMPLE = 100
+SALE_NUMERIC_FIELDS = {
+    "sold_price", "listed_price", "accepted_offer_price", "shipping_charged",
+    "platform_fees", "payment_processing_fees", "promoted_listing_fees",
+    "other_costs", "net_proceeds",
+}
 
 
 class OutcomeError(ValueError):
@@ -53,6 +58,22 @@ def validate_event(event: dict[str, Any]) -> None:
         for field in ("channel", "sold_price", "currency"):
             if event.get(field, "") in {"", None}:
                 raise OutcomeError(f"SOLD event requires {field}")
+    if event["event_type"] == "LISTED":
+        for field in ("channel", "listed_price", "currency"):
+            if event.get(field, "") in {"", None}:
+                raise OutcomeError(f"LISTED event requires {field}")
+    if event["event_type"] == "PRICE_CHANGED":
+        for field in ("channel", "new_price", "currency"):
+            if event.get(field, "") in {"", None}:
+                raise OutcomeError(f"PRICE_CHANGED event requires {field}")
+    for field in SALE_NUMERIC_FIELDS | {"new_price"}:
+        if event.get(field, "") not in {"", None}:
+            try:
+                value = float(event[field])
+            except (TypeError, ValueError) as exc:
+                raise OutcomeError(f"{field} must be numeric") from exc
+            if value < 0:
+                raise OutcomeError(f"{field} cannot be negative")
     if event["event_type"] == "DONATED" and not event.get("destination"):
         raise OutcomeError("DONATED event requires destination")
     if event["event_type"] == "IDENTIFICATION_CONFIRMED":
@@ -122,6 +143,7 @@ def accuracy_report(outcomes_path: Path, inventory_path: Path, intake_id: str) -
         raise OutcomeError("Inventory has blank or duplicate current-intake item IDs")
 
     latest_sale: dict[str, dict[str, Any]] = {}
+    latest_listing: dict[str, dict[str, Any]] = {}
     latest_identity: dict[str, dict[str, Any]] = {}
     for event in events:
         item_id = str(event.get("item_id", ""))
@@ -129,12 +151,19 @@ def accuracy_report(outcomes_path: Path, inventory_path: Path, intake_id: str) -
             continue
         if event.get("event_type") == "SOLD":
             latest_sale[item_id] = event
+        if event.get("event_type") == "LISTED":
+            latest_listing[item_id] = event
         if event.get("event_type") in {"IDENTIFICATION_CONFIRMED", "IDENTIFICATION_CORRECTED"}:
             latest_identity[item_id] = event
 
     absolute_percentage_errors: list[float] = []
     price_range_hits = 0
     pricing_details: list[dict[str, Any]] = []
+    days_to_sale_values: list[float] = []
+    list_to_sale_ratios: list[float] = []
+    net_proceeds_values: list[float] = []
+    below_50_realized = 0
+    channel_counts: dict[str, int] = {}
     for item_id, event in latest_sale.items():
         row = inventory[item_id]
         if str(event.get("currency", "")).upper() != str(row.get("currency", "")).upper():
@@ -152,7 +181,35 @@ def accuracy_report(outcomes_path: Path, inventory_path: Path, intake_id: str) -
         error = abs(realized - mid) / realized * 100
         price_range_hits += int(hit)
         absolute_percentage_errors.append(error)
-        pricing_details.append({"item_id": item_id, "realized_price": realized, "range_covered": hit, "absolute_percentage_error": round(error, 2)})
+        channel = str(event.get("channel", "")).strip()
+        channel_counts[channel] = channel_counts.get(channel, 0) + 1
+        below_50_realized += int(realized < 50)
+        listed = latest_listing.get(item_id)
+        listed_price = None
+        days_to_sale = None
+        if listed:
+            try:
+                listed_price = float(listed["listed_price"])
+                if listed_price > 0:
+                    list_to_sale_ratios.append(realized / listed_price)
+                listed_at = datetime.fromisoformat(str(listed["occurred_at"]).replace("Z", "+00:00"))
+                sold_at = datetime.fromisoformat(str(event["occurred_at"]).replace("Z", "+00:00"))
+                days_to_sale = max(0.0, (sold_at - listed_at).total_seconds() / 86400)
+                days_to_sale_values.append(days_to_sale)
+            except (TypeError, ValueError, KeyError):
+                listed_price = None
+                days_to_sale = None
+        net_proceeds = event.get("net_proceeds")
+        if net_proceeds not in {"", None}:
+            net_proceeds_values.append(float(net_proceeds))
+        pricing_details.append({
+            "item_id": item_id,
+            "realized_price": realized,
+            "listed_price": listed_price,
+            "days_to_sale": round(days_to_sale, 2) if days_to_sale is not None else None,
+            "range_covered": hit,
+            "absolute_percentage_error": round(error, 2),
+        })
 
     identification_details = [
         {"item_id": item_id, "accurate": event.get("event_type") == "IDENTIFICATION_CONFIRMED"}
@@ -185,6 +242,12 @@ def accuracy_report(outcomes_path: Path, inventory_path: Path, intake_id: str) -
         "pricing_sample": pricing_sample,
         "price_range_coverage_pct": round(price_range_coverage, 2) if price_range_coverage is not None else None,
         "median_absolute_percentage_error_pct": round(median_ape, 2) if median_ape is not None else None,
+        "below_50_realized_count": below_50_realized,
+        "below_50_realized_rate_pct": round(below_50_realized / pricing_sample * 100, 2) if pricing_sample else None,
+        "median_days_to_sale": round(statistics.median(days_to_sale_values), 2) if days_to_sale_values else None,
+        "median_sale_to_list_ratio": round(statistics.median(list_to_sale_ratios), 4) if list_to_sale_ratios else None,
+        "median_net_proceeds": round(statistics.median(net_proceeds_values), 2) if net_proceeds_values else None,
+        "sales_by_channel": dict(sorted(channel_counts.items())),
         "accuracy_claim_authorized": claim_authorized,
         "identification_details": identification_details,
         "pricing_details": pricing_details,

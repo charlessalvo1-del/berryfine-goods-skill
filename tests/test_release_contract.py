@@ -18,10 +18,10 @@ class ReleaseContractTests(unittest.TestCase):
         new_scripts = {path.name for path in (SKILL / "scripts").iterdir()}
         self.assertFalse({"warehouse.py", "movement.py", "container_tracking.py"} & new_scripts)
 
-    def test_version_is_two_point_nine_one(self) -> None:
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.9.1")
+    def test_version_is_two_point_ten_zero(self) -> None:
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "2.10.0")
 
-    def test_v2_9_adaptive_age_policy_is_documented(self) -> None:
+    def test_v2_10_adaptive_age_policy_is_documented(self) -> None:
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8-sig")
         for required in (
             "adaptive `6 / 8 / 10` search ladder",
@@ -31,6 +31,8 @@ class ReleaseContractTests(unittest.TestCase):
             "conservative decision floor",
             "three years",
             "decision confidence",
+            "dual_method_consensus",
+            "robust-median bootstrap",
             "scripts/price_first_gate.py",
         ):
             self.assertIn(required, text)

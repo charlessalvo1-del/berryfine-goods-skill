@@ -57,6 +57,7 @@ FIELDS = [
     "valuation_basis",
     "valuation_confidence",
     "decision_confidence",
+    "decision_validation",
     "price_type",
     "ebay_price",
     "local_price",
@@ -153,6 +154,15 @@ ENUMS = {
     },
     "valuation_confidence": {"", "low", "medium", "high"},
     "decision_confidence": {"", "low", "medium", "high"},
+    "decision_validation": {
+        "",
+        "dual_method_consensus",
+        "single_method_controlled",
+        "validation_disagreement",
+        "staff_confirmation",
+        "insufficient_or_crossing_evidence",
+        "not_applicable",
+    },
     "price_type": {"", "market", "provisional", "operational", "unpriced"},
     "triage_lane": {
         "",
@@ -201,6 +211,7 @@ NEW_OPTIONAL_FIELDS = {
     "donation_confirmation_notes",
     "price_type",
     "decision_confidence",
+    "decision_validation",
 }
 
 
@@ -346,6 +357,7 @@ def validate_row(
 
     if enforce_current_policy and row.get("price_type"):
         price_type = row["price_type"]
+        decision_validation = row.get("decision_validation", "")
         identity_eligible = row["identification_confidence"] in {"confirmed", "probable"}
         safety_eligible = row["safety_status"] == "CLEAR"
         direct_comp_count = int(float(row.get("comp_count") or 0))
@@ -383,6 +395,16 @@ def validate_row(
                 required_decision = "SELL"
             else:
                 required_decision = "REVIEW"
+        if decision_validation in {"validation_disagreement", "insufficient_or_crossing_evidence"}:
+            required_decision = "REVIEW"
+        if row["decision"] == "SELL" and decision_validation not in {
+            "dual_method_consensus", "single_method_controlled"
+        }:
+            raise InventoryError(f"{label} SELL requires independent decision validation")
+        if row["decision"] == "DONATE" and decision_validation != "dual_method_consensus":
+            raise InventoryError(f"{label} DONATE requires dual-method consensus")
+        if row["decision"] == "CONFIRM DONATION" and decision_validation != "staff_confirmation":
+            raise InventoryError(f"{label} CONFIRM DONATION requires staff_confirmation validation")
         if row["decision"] != required_decision:
             raise InventoryError(f"{label} {price_type} pricing requires {required_decision}; got {row['decision']}")
     elif enforce_current_policy and has_supported_range:

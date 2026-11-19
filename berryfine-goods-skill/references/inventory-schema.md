@@ -59,6 +59,7 @@ Top-level client and intake values fill missing item values. Item-level values t
 | `valuation_basis` | conditional | Evidence class used for valuation |
 | `valuation_confidence` | conditional | `low`, `medium`, or `high` |
 | `decision_confidence` | conditional | Independent `low`, `medium`, or `high` confidence that the disposition threshold is resolved |
+| `decision_validation` | conditional | `dual_method_consensus`, `single_method_controlled`, `validation_disagreement`, `staff_confirmation`, or `insufficient_or_crossing_evidence` |
 | `price_type` | conditional | `market`, `provisional`, `operational`, or `unpriced` |
 | `ebay_price` | optional | Recommended initial eBay price |
 | `local_price` | optional | Recommended local-market price |
@@ -91,8 +92,8 @@ Top-level client and intake values fill missing item values. Item-level values t
 - Do not store image binaries or private contact data in the ledger.
 - Do not reuse an `item_id` for a different physical item.
 - Use the same `item_id` to revise research, condition, or listing status.
-- Under v2.9, keep pricing confidence independent from decision confidence. `market` means stable medium/high-confidence pricing; `provisional` means the numeric price remains imprecise; `operational` is the explicit zero-comp $45 staff-handling price and is not a market-value claim; `unpriced` means no responsible price was possible.
-- Automatically `SELL` only a confirmed/probable, safety-clear item whose conservative decision floor reaches $55 with medium/high decision confidence. A provisional price may support SELL when its conservative floor is decisive. Automatically `DONATE` only a `market` item whose complete credible range is below $40. Use `CONFIRM DONATION` for an eligible $40-$49.99 recommendation or operational $45 handling price.
+- Under v2.10, keep identification, pricing, and decision confidence independent. `market` means stable medium/high-confidence pricing; `provisional` means the numeric price remains imprecise; `operational` is the explicit zero-comp $45 staff-handling price and is not a market-value claim; `unpriced` means no responsible price was possible.
+- After the base threshold decision, apply the deterministic robust-median bootstrap and adverse stress validation. `dual_method_consensus` permits HIGH-confidence SELL or DONATE. `single_method_controlled` permits only a MEDIUM-confidence controlled SELL test listing. A proposed SELL supported by neither method and every DONATE lacking dual consensus becomes REVIEW. Use `staff_confirmation` for an eligible $40-$49.99 recommendation or operational $45 handling price.
 - A new `CONFIRM DONATION` row must use confirmation status `PENDING`, include `Confirm this item will not be sold before donation or rehoming.` in `decision_rationale`, and remain `DRAFT` and human-review `PENDING`.
 - Resolve the band to `DONATE` only with status `CONFIRMED`, `donation_confirmed_by`, a valid ISO `donation_confirmed_at`, and `listing_status=DO_NOT_LIST`. Resolve it to `SELL` only with status `DECLINED`, the same human record, and an explicit `decision_override_reason`.
 - Keep the $50 sell threshold separate from the $125 auction-candidate routing rule.
@@ -125,4 +126,4 @@ performs publication to an external marketplace.
 
 ## Realized outcomes
 
-Do not overwrite the original appraisal with operational results. Append testing, listing, price-change, sold, donated, returned, and identification-correction events to the hash-chained outcome ledger with `scripts/outcome_ledger.py`. Sold events require channel, sold price, and currency; donation events require a destination.
+Do not overwrite the original appraisal with operational results. Append testing, listing, price-change, sold, donated, returned, and identification-correction events to the hash-chained outcome ledger with `scripts/outcome_ledger.py`. LISTED events require channel, original list price, and currency. SOLD events require channel, realized price, and currency and should also capture accepted-offer price, shipping charged, platform/payment/promoted fees, other costs, and net proceeds when available. These events produce range coverage, median absolute percentage error, sale-to-list ratio, days to sale, below-$50 realized rate, and channel totals. Donation events require a destination.
