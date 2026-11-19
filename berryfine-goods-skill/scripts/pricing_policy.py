@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared BFG v2.9 adaptive-age pricing and decision policy."""
+"""Shared BFG v2.10 adaptive-age pricing and independent decision policy."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate BFG v2.9 adaptive-age research and ledger decisions."""
+"""Validate BFG v2.10 adaptive-age research and ledger decisions."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def validate_item(item, ledger):
     if stop_tier == 8 and len(included) < 2 and not stop.get("staff_boundary_decision") and expected["decision_confidence"] != "high":
         raise GateError(f"{item_id} search-eight stop needs two prices, HIGH decision confidence, or the staff-boundary rule")
     if str(item.get("pricing_confidence", "")).casefold() != expected["pricing_confidence"]:
-        raise GateError(f"{item_id} pricing_confidence does not match v2.9 synthesis")
+        raise GateError(f"{item_id} pricing_confidence does not match v2.10 synthesis")
 
     synthesis = item.get("price_synthesis")
     if not isinstance(synthesis, dict) or synthesis.get("method") != "weighted_marketplace_median":
@@ -104,7 +104,7 @@ def validate_item(item, ledger):
     if ledger.get("decision_validation") != expected["decision_validation"]:
         raise GateError(f"{item_id} ledger decision_validation does not match")
     if ledger.get("decision") != expected["decision"]:
-        raise GateError(f"{item_id} ledger decision does not match v2.9 policy")
+        raise GateError(f"{item_id} ledger decision does not match v2.10 policy")
     if int(float(ledger.get("comp_count") or 0)) != expected["comp_count"]:
         raise GateError(f"{item_id} ledger comp_count does not match")
     return {

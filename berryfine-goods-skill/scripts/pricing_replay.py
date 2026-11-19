@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay BFG v2.9 pricing against sealed prior research without new searches."""
+"""Replay BFG v2.10 pricing against sealed prior research without new searches."""
 
 from __future__ import annotations
 

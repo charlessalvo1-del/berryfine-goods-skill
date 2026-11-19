@@ -18,7 +18,7 @@ Turn photographed goods into an evidence-backed, client-specific inventory. Keep
 - Run `scripts/preflight_lock.py --help` before every new intake or retest.
 - Run `scripts/sequence_review_gate.py --help` before grouping a flat, unnumbered camera roll.
 - Run `scripts/research_gate.py --help` only when validating a retained legacy v2.6 research audit.
-- Run `scripts/price_first_gate.py --help` for v2.9 adaptive-age research. Use `adaptive_market_gate.py` only for sealed v2.7 records.
+- Run `scripts/price_first_gate.py --help` for v2.10 adaptive-age research. Use `adaptive_market_gate.py` only for sealed v2.7 records.
 - Use `scripts/pricing_policy.py` as the shared price/disposition calculation and `scripts/pricing_replay.py` only for hash-bound, non-destructive policy comparisons against sealed evidence.
 - Run `scripts/delivery_gate.py --help` before reporting a batch complete.
 - Run `scripts/catalog_gate.py --help` after spreadsheet authoring and before the delivery gate.
@@ -228,7 +228,7 @@ Produce:
 - `quick_sale_price`: price intended to move quickly
 - `decision`: `SELL`, `DONATE`, `REVIEW`, or `CONFIRM DONATION`
 
-Use the v2.9 adaptive-age rule:
+Use the v2.10 adaptive-age rule:
 
 - `SELL` when the conservative decision floor is at least $55, or the controlled $50 exception passes, with medium/high decision confidence, confirmed/probable identity, and safety clearance; numeric pricing confidence may remain LOW when the disposition is nevertheless decisive
 - `DONATE` only for `market` pricing whose credible high value is below $40
